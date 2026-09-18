@@ -16,11 +16,11 @@ Kelly, and paper-executes the survivors. No real orders are ever placed.
 
 ## Status
 
-**Phase 1 complete.** Repository structure, normalized schemas, adapter
-interfaces, traceable cost configuration, and API research are in place.
-Phases 2-13 are tracked below. Nothing here fabricates results: until live
-data flows through the adapters, every number in this repo is structural,
-not empirical.
+**Phase 2 complete.** Repository structure, normalized schemas, live
+Polymarket and Kalshi adapters, labeled snapshot I/O, traceable cost
+configuration, and API research are in place. Phases 3-13 are tracked below.
+Nothing here fabricates results: adapter tests run on labeled fixtures, and
+live smoke tests hit the public APIs directly.
 
 ## The problem
 
@@ -117,7 +117,7 @@ frontend/           # React + TypeScript dashboard (Phase 10)
 ## Build phases
 
 - [x] Phase 1: repository and architecture
-- [ ] Phase 2: Polymarket/Kalshi data adapters
+- [x] Phase 2: Polymarket/Kalshi data adapters (live-verified, 28 tests)
 - [ ] Phase 3: normalized market schema (schemas defined; adapters pending)
 - [ ] Phase 4: order-book engine (VWAP, slippage)
 - [ ] Phase 5: bundle arbitrage detector
@@ -132,7 +132,9 @@ frontend/           # React + TypeScript dashboard (Phase 10)
 
 ## Limitations
 
-- No live data flows yet; adapters are interfaces until Phase 2.
+- Live public data flows through both venue adapters; no credentials needed
+  for market data. Kalshi production rejected this datacenter IP (HTTP 403);
+  the adapter defaults to the demo environment (see docs/api-research.md).
 - Fee schedules change; `configs/fees.yaml` is a dated snapshot and the
   engine resolves live rates where the venue allows.
 - Cross-venue pairs can differ in settlement rules, tick sizes, and
