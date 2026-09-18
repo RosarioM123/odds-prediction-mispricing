@@ -1,4 +1,7 @@
-# Prediction Market Mispricing and Execution Engine
+# ALEA: Prediction Market Mispricing and Execution Engine
+
+*"Alea iacta est" — the die is cast. This engine checks whether a mispriced
+odd survives contact with fees, slippage, and latency.*
 
 A quantitative research and execution engine that asks one question:
 
