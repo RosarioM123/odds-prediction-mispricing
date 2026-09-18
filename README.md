@@ -1,5 +1,7 @@
 # ODDS
 
+![CI](https://github.com/RosarioM123/odds-prediction-mispricing/actions/workflows/ci.yml/badge.svg)
+
 ## Prediction Market Mispricing & Execution Engine
 
 **Arbitrage detection across Polymarket and Kalshi order books — full-book VWAP cost modeling, fractional-Kelly sizing, and chronological paper execution. Paper trades only: no real orders, ever.**
