@@ -1,0 +1,72 @@
+{
+  "n_snapshots": 5,
+  "labels": [
+    "simulated"
+  ],
+  "n_opportunities": 3,
+  "n_executed": 3,
+  "n_rejected": 0,
+  "trades_by_status": {
+    "FILLED": 6
+  },
+  "total_expected_net": 10.043208,
+  "total_realized_net": 10.260033,
+  "hit_rate": 1.0,
+  "flags": [
+    "ALL_INPUT_SIMULATED: no live market data in this replay",
+    "SAMPLE_TOO_SMALL: n_executed=3 < 30; Sharpe ratio, win rate, and significance claims are not meaningful"
+  ],
+  "rows": [
+    {
+      "opportunity_id": "bundle_arbitrage-polymarket-20260918005857429982",
+      "strategy": "bundle_arbitrage",
+      "label": "simulated",
+      "detected_at": "2026-09-18T12:00:00+00:00",
+      "sized_quantity": 46.739114,
+      "decision": "PAPER_EXECUTE",
+      "expected_net": 3.442336,
+      "realized_net": 3.517118,
+      "trade_statuses": [
+        "FILLED",
+        "FILLED"
+      ],
+      "notes": []
+    },
+    {
+      "opportunity_id": "cross_venue_arbitrage-polymarket-kalshi-20260918005857430450",
+      "strategy": "cross_venue_arbitrage",
+      "label": "simulated",
+      "detected_at": "2026-09-18T12:02:00+00:00",
+      "sized_quantity": 45.967083,
+      "decision": "PAPER_EXECUTE",
+      "expected_net": 3.158536,
+      "realized_net": 3.225797,
+      "trade_statuses": [
+        "FILLED",
+        "FILLED"
+      ],
+      "notes": []
+    },
+    {
+      "opportunity_id": "bundle_arbitrage-polymarket-20260918005857430745",
+      "strategy": "bundle_arbitrage",
+      "label": "simulated",
+      "detected_at": "2026-09-18T12:03:00+00:00",
+      "sized_quantity": 46.739114,
+      "decision": "PAPER_EXECUTE",
+      "expected_net": 3.442336,
+      "realized_net": 3.517118,
+      "trade_statuses": [
+        "FILLED",
+        "FILLED"
+      ],
+      "notes": []
+    }
+  ],
+  "config_notes": {
+    "kelly_fraction": 0.5,
+    "min_net_edge": 0.005,
+    "bankroll": 100.0,
+    "p_win_placeholder": true
+  }
+}

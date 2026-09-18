@@ -1,0 +1,244 @@
+// ODDS dashboard theme: dark trading-terminal aesthetic.
+$bg: #0d1117;
+$panel: #161b22;
+$border: #30363d;
+$text: #e6edf3;
+$muted: #8b949e;
+$accent: #58a6ff;
+$green: #3fb950;
+$red: #f85149;
+$amber: #d29922;
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: $bg;
+  color: $text;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+  }
+
+  .subtitle {
+    margin: 4px 0 0;
+    color: $muted;
+    font-size: 13px;
+  }
+
+  .config {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    span {
+      background: $panel;
+      border: 1px solid $border;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: $muted;
+    }
+  }
+}
+
+.banner {
+  background: rgba($amber, 0.12);
+  border: 1px solid $amber;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+
+  strong {
+    color: $amber;
+    letter-spacing: 0.06em;
+    font-size: 13px;
+  }
+
+  span {
+    color: $text;
+    font-size: 13px;
+  }
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.card {
+  background: $panel;
+  border: 1px solid $border;
+  border-radius: 8px;
+  padding: 12px 14px;
+
+  .card-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: $muted;
+    margin-bottom: 4px;
+  }
+
+  .card-value {
+    font-size: 22px;
+    font-weight: 600;
+
+    &.money { color: $green; }
+  }
+
+  .card-note {
+    font-size: 11px;
+    color: $amber;
+    margin-top: 2px;
+  }
+}
+
+.panel {
+  background: $panel;
+  border: 1px solid $border;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+
+  h2 {
+    margin: 0 0 8px;
+    font-size: 15px;
+  }
+
+  .hint {
+    color: $muted;
+    font-size: 12px;
+    margin: 0 0 8px;
+  }
+
+  .empty {
+    color: $muted;
+  }
+}
+
+.flags {
+  margin: 0;
+  padding-left: 20px;
+  color: $amber;
+  font-size: 13px;
+
+  li { margin-bottom: 4px; }
+}
+
+.table-wrap { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  th {
+    text-align: left;
+    color: $muted;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 10px;
+    border-bottom: 1px solid $border;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid $border;
+    vertical-align: top;
+  }
+
+  tbody tr:not(.detail) {
+    cursor: pointer;
+
+    &:hover { background: rgba($accent, 0.06); }
+    &.open { background: rgba($accent, 0.08); }
+  }
+
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+}
+
+.pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+
+  &.go { background: rgba($green, 0.15); color: $green; border: 1px solid $green; }
+  &.stop { background: rgba($red, 0.15); color: $red; border: 1px solid $red; }
+}
+
+.detail td {
+  background: #11161d;
+  cursor: default;
+}
+
+.detail-body {
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 8px;
+
+    h4 {
+      margin: 0 0 4px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: $muted;
+    }
+
+    p, ul {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    ul { padding-left: 18px; }
+  }
+
+  .hint {
+    color: $muted;
+    font-size: 12px;
+    margin: 8px 0 0;
+  }
+}
+
+footer {
+  color: $muted;
+  font-size: 12px;
+  margin-top: 8px;
+  border-top: 1px solid $border;
+  padding-top: 12px;
+}
