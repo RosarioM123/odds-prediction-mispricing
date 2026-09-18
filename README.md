@@ -16,11 +16,33 @@ Kelly, and paper-executes the survivors. No real orders are ever placed.
 
 ## Status
 
-**Phase 2 complete.** Repository structure, normalized schemas, live
-Polymarket and Kalshi adapters, labeled snapshot I/O, traceable cost
-configuration, and API research are in place. Phases 3-13 are tracked below.
-Nothing here fabricates results: adapter tests run on labeled fixtures, and
-live smoke tests hit the public APIs directly.
+**Phase 3 complete.** The quantitative engine is implemented, tested, and
+upstream. In addition to the Phase 2 adapters, the repo now has a
+transaction-cost model (venue fees, VWAP slippage, latency), bundle and
+cross-venue arbitrage detectors with human-readable explanations,
+fractional-Kelly sizing, deterministic risk gates, a paper execution
+simulator (FILLED / PARTIALLY_FILLED / MISSED / EXPIRED), a chronological
+no-look-ahead replay engine, and a React + Sass dashboard rendering replay
+fixtures. **88 tests pass** (28 adapter + 60 engine). Paper trading only:
+no real orders are ever placed, and simulated data is never presented as
+live — every snapshot and fixture carries its label.
+
+## Run it
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m pytest tests/ -q          # 88 tests
+
+# Replay the labeled demo scenarios through detect -> size -> execute
+.venv/bin/python scripts/make_dashboard_fixture.py
+
+# Dashboard (reads the generated fixture; simulated data, bannered)
+cd frontend/dashboard && npm install && npm run build && npm run preview
+```
+
+Environment variables are documented in `.env.example`. The engine uses
+only public venue endpoints; credentials are optional and unused by the
+pipeline.
 
 ## The problem
 
@@ -97,10 +119,10 @@ backend/
   schemas.py        # normalized Pydantic models (venue-independent)
   config.py         # loads configs/*.yaml
   markets/          # MarketDataAdapter ABC + Polymarket/Kalshi adapters
-  arbitrage/        # bundle + cross-venue detectors (Phase 5-6)
-  execution/        # paper execution engine (Phase 8)
-  risk/             # risk controls (Phase 8)
-  backtesting/      # event-driven historical replay (Phase 9)
+  arbitrage/        # costs.py, opportunities.py, sizing.py, settings.py
+  execution/        # paper.py: simulated fills, never real orders
+  risk/             # gates.py: deterministic risk controls
+  backtesting/      # replay.py: chronological no-look-ahead replay
   database/         # persistence (Phase 2)
   models/           # optional NLP matching, advisory only (Phase 12)
   api/              # FastAPI service (Phase 10)
@@ -110,23 +132,24 @@ configs/
   venues.yaml       # endpoint map and rate limits
 data/raw|processed/ # snapshots (gitignored, regenerable)
 docs/               # api-research.md, architecture.md
-tests/
-frontend/           # React + TypeScript dashboard (Phase 10)
+scripts/            # make_dashboard_fixture.py: engine -> dashboard fixture
+tests/              # adapter + engine tests, labeled fixtures
+frontend/           # dashboard/: React + Sass replay dashboard
 ```
 
 ## Build phases
 
 - [x] Phase 1: repository and architecture
-- [x] Phase 2: Polymarket/Kalshi data adapters (live-verified, 28 tests)
-- [ ] Phase 3: normalized market schema (schemas defined; adapters pending)
-- [ ] Phase 4: order-book engine (VWAP, slippage)
-- [ ] Phase 5: bundle arbitrage detector
-- [ ] Phase 6: cross-venue market matching
-- [ ] Phase 7: transaction-cost model
-- [ ] Phase 8: paper execution and risk controls
-- [ ] Phase 9: historical replay and backtesting
-- [ ] Phase 10: dashboard
-- [ ] Phase 11: full test suite
+- [x] Phase 2: Polymarket/Kalshi data adapters (live-verified, 28 tests; reconciled upstream)
+- [x] Phase 3: quantitative engine — costs, detection, sizing, risk, paper execution, replay (60 engine tests)
+- [x] Phase 4: order-book engine (VWAP, slippage) — `backend/arbitrage/costs.py`
+- [x] Phase 5: bundle arbitrage detector — `backend/arbitrage/opportunities.py`
+- [x] Phase 6: cross-venue market matching (deterministic; NLP advisory only) — same module
+- [x] Phase 7: transaction-cost model — `backend/arbitrage/costs.py` + `configs/fees.yaml`
+- [x] Phase 8: paper execution and risk controls — `backend/execution/paper.py`, `backend/risk/gates.py`
+- [x] Phase 9: historical replay and backtesting — `backend/backtesting/replay.py`
+- [x] Phase 10: dashboard — `frontend/dashboard/` (React + Sass, simulated fixtures)
+- [x] Phase 11: full test suite — 88 tests, all passing
 - [ ] Phase 12: AI-assisted market matching (advisory only)
 - [ ] Phase 13: documentation
 
