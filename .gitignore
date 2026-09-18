@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# pytest
+.pytest_cache/
+
+# SQLite runtime databases
+*.db
+*.db-wal
+*.db-shm
+
+# Snapshots and local data (large, regenerable)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
