@@ -1,5 +1,5 @@
 [project]
-name = "prediction-mispricing-engine"
+name = "odds-prediction-mispricing"
 version = "0.1.0"
 description = "Research and execution engine for prediction-market mispricing across Polymarket and Kalshi."
 readme = "README.md"
