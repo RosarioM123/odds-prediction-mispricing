@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Strategy, sizing, risk, and latency assumptions. Change these to run
+# sensitivity analysis; every backtest records the config it ran under.
+# ---------------------------------------------------------------------------
+
+detection:
+  # Bundle arbitrage: YES ask + NO ask < 1 - threshold (in dollars)
+  min_net_edge: 0.005          # 0.5 cents per share/contract
+  min_liquidity_contracts: 50  # minimum executable size to consider
+  max_book_age_seconds: 5      # quotes older than this are STALE, never traded
+
+cross_venue:
+  min_match_confidence: 0.85   # deterministic matcher must score >= this
+  min_net_edge: 0.01
+
+kelly:
+  # Fractional Kelly options; the engine never uses full Kelly by default.
+  fraction: 0.5                # 0.25 | 0.50 | 1.00
+  assumed_edge_probability: 0.55  # placeholder until a calibrated model exists (Phase 9+)
+
+risk:
+  max_position_per_market: 500      # contracts
+  max_portfolio_exposure: 5000      # contracts notional-equivalent
+  max_venue_exposure: 3000
+  max_daily_loss: 100.0             # dollars; paper trading halts below this
+  max_acceptable_latency_ms: 2000
+
+latency:
+  # Simulated latency budget (ms). Replace with measured values when available.
+  assumed_data_latency_ms: 250      # venue quote -> our detector
+  assumed_processing_latency_ms: 50 # detection -> decision
+  assumed_execution_latency_ms: 500 # decision -> simulated fill
+  # Latency cost: expected adverse price move per second of delay, in dollars.
+  # Calibrated from opportunity-decay analysis (Phase 9/14); default is a
+  # conservative placeholder and is labeled as such in every explanation.
+  adverse_drift_per_second: 0.002
+  drift_is_placeholder: true
+
+slippage:
+  # Method 1 (implemented Phase 4): walk the order book to VWAP.
+  # Method 2 (Phase 9+): empirical impact = k * (size / depth) calibrated
+  # from historical snapshots. Until calibrated, k is a placeholder.
+  empirical_k: 0.5
+  empirical_k_is_placeholder: true

@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# Transaction-cost assumptions. Every number below is traceable to the source
+# listed beside it. Fee schedules change: re-verify against the official
+# pages before drawing conclusions from live data.
+# All research retrieved 2026-09-18.
+# ---------------------------------------------------------------------------
+
+polymarket:
+  # Official fee page: https://docs.polymarket.com/trading/fees
+  # Per-token live rate (authoritative, do NOT hardcode):
+  #   GET https://clob.polymarket.com/fee-rate?token_id={id} -> {"base_fee": bps}
+  formula: "fee = C * fee_rate * (p * (1 - p)) ** exponent"
+  variables:
+    C: "number of shares traded"
+    p: "share price in dollars"
+    fee_rate: "per-market taker rate; resolve live via /fee-rate"
+    exponent: "per-market exponent (commonly 1)"
+  maker_fee: 0.0
+  maker_note: "Makers pay no fee; taker fees fund daily maker rebates."
+  minimum_fee_usdc: 0.0001
+  minimum_fee_note: "Smaller amounts round to zero."
+  # Documented per-category taker rates (snapshot, mid-2026; verify live):
+  category_rates_snapshot:
+    crypto: 0.07
+    sports_economics_culture_weather_other: 0.05
+    finance_politics_mentions_tech: 0.04
+    geopolitics_world_events: 0.0
+  category_note: >-
+    Snapshot only. The adapter must resolve the live rate per token and must
+    never use this table for execution decisions.
+
+kalshi:
+  # Official fee schedule (effective 2026-07-07):
+  # https://kalshi.com/docs/kalshi-fee-schedule.pdf
+  taker_formula: "fee = round_up(M * 0.07 * C * P * (1 - P))"
+  maker_formula: "fee = round_up(M * 0.0175 * C * P * (1 - P))"
+  variables:
+    M: "series multiplier (default 1 unless the schedule says otherwise)"
+    C: "number of contracts executed"
+    P: "contract price in dollars (0.50 = fifty cents)"
+  rounding: "round UP to the next whole cent, per executed order"
+  maker_note: "Maker fee applies only on series designated as having maker fees, and only when the resting order executes. Cancelling is free."
+  settlement_fee: 0.0
+  membership_fee: 0.0
+  reduced_rate_note: "Some index series (e.g. S&P/Nasdaq) use half the standard rate; check the schedule per series."
+
+# Conservative defaults used when a live fee rate cannot be resolved.
+# The engine labels any opportunity computed with a fallback rate.
+fallback:
+  assume_fee_free: false
+  fallback_taker_rate: 0.05
+  label: "FEE_RATE_FALLBACK"

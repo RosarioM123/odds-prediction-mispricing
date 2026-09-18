@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Venue connection map. Researched 2026-09-18 from official documentation.
+# See docs/api-research.md for full notes and sources.
+# ---------------------------------------------------------------------------
+
+polymarket:
+  docs: "https://docs.polymarket.com"
+  openapi:
+    clob: "https://docs.polymarket.com/api-spec/clob-openapi.yaml"
+    gamma: "https://docs.polymarket.com/api-spec/gamma-openapi.yaml"
+  gamma_base: "https://gamma-api.polymarket.com"
+  clob_base: "https://clob.polymarket.com"
+  websocket: "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+  auth_for_market_data: false
+  auth_for_trading: "L1/L2 HMAC wallet signing (not used: paper trading only)"
+  rate_limits:
+    note: "Gamma ~4000 req/10s overall; /events 500/10s; /markets 300/10s. CLOB orders ~10 req/s."
+  token_model: "Each market has two outcome tokens (YES/NO); join Gamma clobTokenIds to CLOB token_id."
+  book_ordering: "CLOB /book returns levels worst-first; best level is the LAST element."
+
+kalshi:
+  docs: "https://docs.kalshi.com"
+  rest_prod: "https://external-api.kalshi.com/trade-api/v2"
+  rest_demo: "https://external-api.demo.kalshi.co/trade-api/v2"
+  auth_for_market_data: false
+  auth_for_trading: "API key + RSA signature headers (not used: paper trading only)"
+  rate_limits:
+    note: "Tiered token buckets; Basic tier 200 reads/sec. See docs for current tiers."
+  price_units: "integer cents (1-99)"
+  orderbook_shape: "yes/no arrays of [price_cents, count] pairs"
