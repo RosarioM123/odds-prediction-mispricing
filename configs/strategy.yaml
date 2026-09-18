@@ -17,6 +17,10 @@ kelly:
   # Fractional Kelly options; the engine never uses full Kelly by default.
   fraction: 0.5                # 0.25 | 0.50 | 1.00
   assumed_edge_probability: 0.55  # placeholder until a calibrated model exists (Phase 9+)
+  # Locked arbitrage is not a directional bet: the YES+NO pair settles to $1
+  # by construction. p_win ~ 1 minus execution risk (stale quotes, partial
+  # fills, fee mis-estimation). This is an assumption, not a calibrated model.
+  arbitrage_p_win: 0.99
 
 risk:
   max_position_per_market: 500      # contracts
