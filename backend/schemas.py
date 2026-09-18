@@ -197,6 +197,10 @@ class PaperTrade(BaseModel):
     quantity: float = Field(gt=0.0)
     expected_price: float
     simulated_fill_price: float
+    filled_quantity: float = Field(
+        default=0.0, ge=0.0,
+        description="Contracts actually filled; < quantity on PARTIALLY_FILLED.",
+    )
     fees: float = 0.0
     slippage: float = 0.0
     gross_pnl: float = 0.0
