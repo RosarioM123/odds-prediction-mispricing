@@ -101,3 +101,60 @@ deprecated). OpenAPI spec for event contracts is downloadable from the docs.
 - Confirm the exact Kalshi order-book response envelope with one live call.
 - Confirm Polymarket `/fee-rate` behavior for a fee-free token.
 - Measure real round-trip latency to both venues for the latency budget.
+
+## Live verification log (2026-09-18)
+
+All calls below were public, unauthenticated GETs.
+
+### Polymarket (production)
+
+- `GET gamma-api.polymarket.com/markets?active=true&closed=false&limit=1`
+  returned a market with `outcomes: '["Yes", "No"]'`,
+  `clobTokenIds: '["<yes_token>", "<no_token>"]'` (JSON-encoded strings),
+  `orderPriceMinTickSize: 0.001`, `orderMinSize: 5`, `takerBaseFee: 1000`,
+  `acceptingOrders: true`.
+- `GET clob.polymarket.com/book?token_id=<yes_token>` returned
+  `{"market", "asset_id", "timestamp": "1789690457621" (ms, string), "hash",
+  "bids": [{"price": "0.001", "size": "10465150.31"}, ...]}`.
+  Levels arrive **worst-first** (bids ascending, asks descending); the
+  adapter reverses them to best-first. A real book had 41 bids / 132 asks.
+- `GET /fee-rate?token_id=` returned `{"base_fee": 1000}`.
+- `GET /tick-size?token_id=` returned `{"minimum_tick_size": 0.001}`.
+- `GET /price?token_id=&side=BUY` returned `{"price": "0.042"}`.
+- Caveat: `base_fee` values observed (0, 1000) are coarse relative to the
+  documented per-category formula rates. The adapter resolves and caches
+  the live value; Phase 7 must pin down exactly how it enters the cost
+  model. Do not treat `base_fee / 10000` as the final fee without that work.
+
+### Kalshi
+
+- Production (`external-api.kalshi.com`) returned **HTTP 403** to this
+  datacenter IP on 2026-09-18, for both `curl` and Python clients.
+  The demo host worked. Implication: production reads may require
+  non-datacenter egress; the adapter defaults to `env="demo"` and raises
+  a descriptive error on production 403s.
+- Demo (`external-api.demo.kalshi.co`) `GET /markets?status=open` returned
+  `{"markets": [{ticker, event_ticker, title, yes_sub_title, no_sub_title,
+  status: "active", yes_bid/yes_ask (cents or null), expiration_time, ...}],
+  "cursor": ...}`. Note the query filter uses `status=open` while market
+  objects report `status: "active"`; both are treated as tradable.
+- Demo `GET /markets/{ticker}/orderbook` returned the envelope
+  `{"orderbook_fp": {"yes_dollars": [], "no_dollars": []}}`
+  (dollar floats). The documented classic envelope
+  `{"orderbook": {"yes": [[cents, count]], "no": [...]}}` is also accepted;
+  cents are divided by 100.
+- Demo markets carried **no liquidity** (50 sampled, zero with quotes),
+  so a non-empty Kalshi book could not be captured live. Adapter behavior
+  on real ladders is covered by fixture tests only, labeled as such.
+- **Documented limitation:** the public orderbook envelope does not
+  separate bids from asks, so Kalshi books normalize with asks populated
+  and bids empty. Spread and mid-price are unavailable for Kalshi until
+  bid semantics are verified. Bundle arbitrage (YES ask + NO ask) is
+  unaffected.
+
+### Remaining open items
+
+- Confirm Polymarket `/fee-rate` behavior for a fee-free token.
+- Measure real round-trip latency to both venues for the latency budget.
+- Capture a non-empty Kalshi order book from production or a liquid demo
+  market to confirm ladder semantics.
