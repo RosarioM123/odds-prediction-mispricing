@@ -5,15 +5,23 @@ Uses only public endpoints (no credentials):
   GET {base}/markets/{ticker}                    single market detail
   GET {base}/markets/{ticker}/orderbook          order book (both sides)
 
-Verified response shapes (2026-09-18, demo environment):
+Verified response shapes (official OpenAPI spec, https://docs.kalshi.com/openapi.yaml,
+GET /markets/{ticker}/orderbook):
+  - The order book "returns yes bids and no bids only (no asks are returned)".
+  - "a bid for yes at price X is equivalent to an ask for no at price
+    (100-X) ... with identical contract sizes", because a yes order and a no
+    order whose prices sum to $1 form a trade.
+  - Price levels are "organized from best to worst prices" (bids: descending).
   /markets -> {"markets": [{"ticker", "event_ticker", "title",
                 "yes_sub_title", "no_sub_title", "status" ("active"),
                 "yes_bid", "yes_ask" (cents or null), "expiration_time", ...}],
                "cursor": str}
   /markets/{ticker}/orderbook -> {"orderbook_fp":
-                {"yes_dollars": [[dollars, count]], "no_dollars": [...]}}}
-  The documented classic envelope {"orderbook":
-                {"yes": [[cents, count]], "no": [...]}} is also accepted.
+                {"yes_dollars": [[dollars, count_fp]], "no_dollars": [...]}}}
+  (fp values are decimal strings, e.g. ["0.1500", "100.00"]).
+  The legacy envelope {"orderbook":
+                {"yes": [[cents, count]], "no": [...]}} is also accepted and
+  carries the same bids-only semantics.
 
 Notes:
   - Production (external-api.kalshi.com) returned HTTP 403 to datacenter IPs
@@ -38,6 +46,16 @@ from backend.schemas import (
 )
 
 _OPEN_STATUSES = {"open", "active"}
+
+
+def _complement_price(price_dollars: float) -> float:
+    """Ask-side price implied by an opposite-side bid (binary complement).
+
+    A bid for one side at price p is equivalent to an ask for the other side
+    at (1 - p) -- official Kalshi OpenAPI semantics. Rounded to 4 decimals to
+    match Kalshi's fixed-point dollar precision.
+    """
+    return round(1.0 - price_dollars, 4)
 
 
 class KalshiAdapter(MarketDataAdapter):
@@ -135,24 +153,33 @@ class KalshiAdapter(MarketDataAdapter):
     def normalize_order_book(self, raw: dict, market: Market,
                              venue_ts: datetime | None = None) -> OrderBook:
         yes_levels, no_levels = self._extract_ladders(raw)
-        levels = yes_levels if market.outcome == Outcome.YES else no_levels
-        # Each side's ladder holds resting orders at which WE can buy that
-        # outcome, so it normalizes to the ASK side.
-        #
-        # LIMITATION (documented, not silently worked around): the public
-        # orderbook envelope does not separate bids from asks, so bids are
-        # left empty. Spread and mid-price are therefore unavailable for
-        # Kalshi until bid semantics are verified against the official docs.
-        # Bundle arbitrage only needs YES ask + NO ask, which this covers.
-        asks = sorted(
-            (OrderBookLevel(price=p, size=s) for p, s in levels),
+        # Per the official Kalshi OpenAPI spec (GET /markets/{ticker}/orderbook):
+        # the public envelope carries YES bids and NO bids ONLY -- there are no
+        # ask levels to parse. Each side's ladder normalizes to BIDS.
+        # The ask for a side is the documented complement of the OPPOSITE
+        # side's bids: "a bid for yes at price X is equivalent to an ask for
+        # no at price (100-X) ... with identical contract sizes", because a
+        # yes order and a no order whose prices sum to $1 form a trade. So to
+        # buy YES immediately you cross the resting NO bids at price (1 - p).
+        if market.outcome == Outcome.YES:
+            bid_levels, opposite_levels = yes_levels, no_levels
+        else:
+            bid_levels, opposite_levels = no_levels, yes_levels
+        bids = sorted(
+            (OrderBookLevel(price=p, size=s) for p, s in bid_levels),
             key=lambda l: l.price,
+            reverse=True,  # best bid first (highest price)
+        )
+        asks = sorted(
+            (OrderBookLevel(price=_complement_price(p), size=s)
+             for p, s in opposite_levels),
+            key=lambda l: l.price,  # best ask first (lowest price)
         )
         return OrderBook(
             market_id=market.market_id,
             venue=self.venue,
             outcome=market.outcome,
-            bids=[],
+            bids=bids,
             asks=asks,
             venue_timestamp=venue_ts,
             received_timestamp=utcnow(),
