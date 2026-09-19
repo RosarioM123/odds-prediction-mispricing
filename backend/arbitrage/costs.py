@@ -14,9 +14,12 @@ the ask, so subtracting the spread again would double-count. When a venue
 does not publish bids (Kalshi public book), spread is unavailable and the
 field is 0.0 with a flag.
 
-Provisional / labeled parts (see configs/fees.yaml):
-  * Polymarket ``base_fee / 10000`` conversion is provisional until Phase 7
-    reconciles the endpoint, market metadata, and official docs.
+Verified 2026-09-18 (see configs/fees.yaml):
+  * Polymarket ``base_fee / 10000`` is the decimal taker fee rate: the
+    official CLOB OpenAPI spec defines ``FeeRate.base_fee`` as "Base fee
+    in basis points" (integer). The rate is per token, applies at match
+    time to taker fills only, and makers pay 0
+    (https://docs.polymarket.com/trading/fees).
   * When no live fee rate is known, a 0.05 fallback rate is used and the
     opportunity is labeled FEE_RATE_FALLBACK.
   * The latency drift rate is a placeholder until calibrated (Phase 9+).
@@ -30,7 +33,10 @@ from backend.schemas import CostBreakdown, Market, OrderBook, Venue
 
 # Labels attached to cost breakdowns / explanations.
 FEE_RATE_FALLBACK = "FEE_RATE_FALLBACK"
-POLYMARKET_FEE_PROVISIONAL = "POLYMARKET_FEE_PROVISIONAL"
+POLYMARKET_FEE_VERIFIED = "POLYMARKET_FEE_VERIFIED"
+# Backwards-compat alias for the pre-verification label name. New code must
+# use POLYMARKET_FEE_VERIFIED.
+POLYMARKET_FEE_PROVISIONAL = POLYMARKET_FEE_VERIFIED
 LATENCY_DRIFT_PLACEHOLDER = "LATENCY_DRIFT_PLACEHOLDER"
 SPREAD_UNAVAILABLE = "SPREAD_UNAVAILABLE_NO_BIDS"
 
@@ -56,7 +62,7 @@ class FeeModel:
     Polymarket: fee = C * fee_rate * (p * (1 - p)) ** exponent (exponent 1
     unless the market says otherwise); makers pay 0; amounts below
     $0.0001 round to zero. The ``base_fee / 10000`` conversion of the live
-    rate is provisional (see module docstring).
+    rate is verified against the official CLOB spec (see module docstring).
     Kalshi: taker fee = round_UP(M * 0.07 * C * P * (1 - P)) to the cent;
     maker fee uses 0.0175. No settlement or membership fees.
     """
@@ -75,7 +81,7 @@ class FeeModel:
             rate = self.fallback_taker_rate
             notes.append(FEE_RATE_FALLBACK)
         elif market.venue == Venue.POLYMARKET:
-            notes.append(POLYMARKET_FEE_PROVISIONAL)
+            notes.append(POLYMARKET_FEE_VERIFIED)
         return rate, notes
 
     def taker_fee(self, market: Market, contracts: float, price: float,
