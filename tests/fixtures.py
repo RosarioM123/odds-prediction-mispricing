@@ -62,7 +62,12 @@ def polymarket_pair(*, yes_ask=0.45, no_ask=0.45, depth=100.0,
 
 def kalshi_yes_no(*, yes_ask=0.45, no_ask=0.45, depth=100.0,
                   at: datetime | None = None, event_id="evt-k1"):
-    """Kalshi-style pair: asks only, bids empty (as the public book is)."""
+    """Kalshi-style synthetic pair: asks only, bids empty.
+
+    Engine-level shape for testing, NOT the public book: since the
+    2026-09-18 adapter fix, Kalshi ladders normalize to bids and asks
+    are the documented 1-bid complement.
+    """
     from backend.arbitrage.opportunities import BookView
     ym = make_market(venue=Venue.KALSHI, outcome=Outcome.YES,
                      market_id="KX-YES", event_id=event_id,
