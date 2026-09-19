@@ -67,10 +67,10 @@ def _yes_market() -> Market:
 
 def test_classic_envelope_cents_to_dollars():
     book = make_adapter().normalize_order_book(CLASSIC_BOOK, _yes_market())
+    # yes ladder -> BIDS (official semantics), no ladder -> derived ASKS
+    assert [l.price for l in book.bids] == pytest.approx([0.53, 0.52])
+    assert book.bids[0].size == pytest.approx(200)
     assert [l.price for l in book.asks] == pytest.approx([0.52, 0.53])
-    assert book.asks[0].size == pytest.approx(100)
-    # Bids are unavailable from the Kalshi envelope (documented limitation).
-    assert book.bids == []
 
 
 def test_fp_envelope_dollars():
@@ -87,8 +87,9 @@ def test_no_side_book():
     adapter = make_adapter()
     no_market = adapter._markets_from_kalshi(KALSHI_MARKET)[1]
     book = adapter.normalize_order_book(CLASSIC_BOOK, no_market)
+    # no ladder -> BIDS, yes ladder -> derived ASKS
+    assert [l.price for l in book.bids] == pytest.approx([0.48, 0.47])
     assert [l.price for l in book.asks] == pytest.approx([0.47, 0.48])
-    assert book.bids == []
 
 
 def test_fetch_markets_follows_cursor(monkeypatch):
