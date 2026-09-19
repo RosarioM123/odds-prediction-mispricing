@@ -1,4 +1,5 @@
 """Tests for the transaction-cost model."""
+
 import pytest
 
 from backend.arbitrage.costs import (
@@ -11,8 +12,7 @@ from backend.arbitrage.costs import (
     latency_adjustment,
     walk_book,
 )
-from backend.schemas import Venue
-from tests.fixtures import T0, kalshi_yes_no, make_book, make_market, polymarket_pair
+from tests.fixtures import kalshi_yes_no, make_book, make_market, polymarket_pair
 
 
 @pytest.fixture()
@@ -102,7 +102,12 @@ def test_latency_adjustment_placeholder_flagged():
 
 def test_cost_breakdown_waterfall_math():
     cb = build_cost_breakdown(
-        raw_edge_per_contract=0.10, size=100.0, fees_total=2.475,
-        slippage_total=0.5, spread_info_per_contract=0.01, latency_total=0.16)
+        raw_edge_per_contract=0.10,
+        size=100.0,
+        fees_total=2.475,
+        slippage_total=0.5,
+        spread_info_per_contract=0.01,
+        latency_total=0.16,
+    )
     assert cb.net_edge == pytest.approx(0.10 - 0.02475 - 0.005 - 0.0016)
     assert cb.spread_cost == pytest.approx(0.01)  # informational only

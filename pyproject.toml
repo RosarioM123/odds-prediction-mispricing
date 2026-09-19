@@ -20,11 +20,19 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "hypothesis>=6.0",
+    "mypy>=1.11",
+    "ruff>=0.8",
+    "pytest-benchmark>=5.0",
+    "coverage>=7.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 
 [tool.setuptools.packages.find]
 include = ["backend*"]
@@ -32,3 +40,73 @@ include = ["backend*"]
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+
+# PyYAML ships no type stubs; treat it as untyped rather than failing the
+# whole run when types-PyYAML is not installed.
+[[tool.mypy.overrides]]
+module = "yaml.*"
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["."]
+exclude = [
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    "backend/database/migrations",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort (import sorting)
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade (modernize to py312 idioms)
+    "N",    # pep8-naming
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    # E501 handled by the formatter; keeping it in the linter double-punishes
+    # long string literals (URLs, doc examples) that cannot be wrapped.
+    "E501",
+    # SIM108 suggests the ternary operator for if/else assignments; the
+    # engine code favors explicit branches for auditability over one-liners.
+    "SIM108",
+    # B008: function calls in default arguments; kept off because no such
+    # pattern exists in the codebase today and the flag adds review noise.
+    # (B006 mutable defaults are still enforced via B.)
+    "B008",
+]
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    # Tests intentionally exercise magic values and verbose class names;
+    # assert-only tests and fixtures do not need type annotations.
+    "S101", "PLR2004", "ANN", "D",
+]
+"scripts/**" = [
+    # One-off dev scripts: no docstrings, loose args, print() is fine.
+    "D", "ANN", "T201",
+]
+
+[tool.coverage.run]
+source = ["backend"]
+branch = true
+omit = ["tests/*", "scripts/*", "*/migrations/*"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+
+[tool.coverage.html]
+directory = "htmlcov"

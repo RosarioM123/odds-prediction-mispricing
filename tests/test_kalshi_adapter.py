@@ -1,9 +1,9 @@
 """Tests for the Kalshi adapter and snapshot I/O. Fixtures mirror verified shapes."""
+
 import pytest
 
 import backend.markets.kalshi as kal
 from backend.markets import (
-    LABEL_LIVE,
     LABEL_SIMULATED,
     KalshiAdapter,
     load_snapshot,
@@ -68,14 +68,14 @@ def _yes_market() -> Market:
 def test_classic_envelope_cents_to_dollars():
     book = make_adapter().normalize_order_book(CLASSIC_BOOK, _yes_market())
     # yes ladder -> BIDS (official semantics), no ladder -> derived ASKS
-    assert [l.price for l in book.bids] == pytest.approx([0.53, 0.52])
+    assert [level.price for level in book.bids] == pytest.approx([0.53, 0.52])
     assert book.bids[0].size == pytest.approx(200)
-    assert [l.price for l in book.asks] == pytest.approx([0.52, 0.53])
+    assert [level.price for level in book.asks] == pytest.approx([0.52, 0.53])
 
 
 def test_fp_envelope_dollars():
     book = make_adapter().normalize_order_book(FP_BOOK, _yes_market())
-    assert [l.price for l in book.asks] == pytest.approx([0.52, 0.53])
+    assert [level.price for level in book.asks] == pytest.approx([0.52, 0.53])
 
 
 def test_unknown_envelope_raises():
@@ -88,8 +88,8 @@ def test_no_side_book():
     no_market = adapter._markets_from_kalshi(KALSHI_MARKET)[1]
     book = adapter.normalize_order_book(CLASSIC_BOOK, no_market)
     # no ladder -> BIDS, yes ladder -> derived ASKS
-    assert [l.price for l in book.bids] == pytest.approx([0.48, 0.47])
-    assert [l.price for l in book.asks] == pytest.approx([0.47, 0.48])
+    assert [level.price for level in book.bids] == pytest.approx([0.48, 0.47])
+    assert [level.price for level in book.asks] == pytest.approx([0.47, 0.48])
 
 
 def test_fetch_markets_follows_cursor(monkeypatch):
@@ -118,8 +118,9 @@ def _sample_book() -> OrderBook:
 
 def test_snapshot_round_trip(tmp_path):
     market = _yes_market()
-    path = save_snapshot(tmp_path / "snap.json", Venue.KALSHI,
-                         [market], [_sample_book()], label=LABEL_SIMULATED)
+    path = save_snapshot(
+        tmp_path / "snap.json", Venue.KALSHI, [market], [_sample_book()], label=LABEL_SIMULATED
+    )
     label, venue, markets, books = load_snapshot(path)
     assert label == LABEL_SIMULATED
     assert venue == Venue.KALSHI

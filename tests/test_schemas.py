@@ -1,5 +1,6 @@
 """Phase 1 tests: normalized schemas and configuration loading."""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 import pytest
 
@@ -20,13 +21,13 @@ from backend.schemas import (
 
 
 def make_book(**kwargs) -> OrderBook:
-    params = dict(
-        market_id="poly-1-yes",
-        venue=Venue.POLYMARKET,
-        outcome=Outcome.YES,
-        bids=[OrderBookLevel(price=0.48, size=100), OrderBookLevel(price=0.47, size=200)],
-        asks=[OrderBookLevel(price=0.52, size=150), OrderBookLevel(price=0.53, size=250)],
-    )
+    params = {
+        "market_id": "poly-1-yes",
+        "venue": Venue.POLYMARKET,
+        "outcome": Outcome.YES,
+        "bids": [OrderBookLevel(price=0.48, size=100), OrderBookLevel(price=0.47, size=200)],
+        "asks": [OrderBookLevel(price=0.52, size=150), OrderBookLevel(price=0.53, size=250)],
+    }
     params.update(kwargs)
     return OrderBook(**params)
 
@@ -82,7 +83,7 @@ def test_cost_breakdown_defaults_to_zero():
 
 
 def test_latency_breakdown_math():
-    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
     lb = LatencyBreakdown(
         market_data_timestamp=t0,
         detection_timestamp=t0,

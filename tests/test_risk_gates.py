@@ -1,4 +1,5 @@
 """Tests for deterministic risk gates."""
+
 import pytest
 
 from backend.arbitrage.costs import FeeModel
@@ -21,8 +22,7 @@ def gate(config):
 @pytest.fixture()
 def opportunity(config):
     yv, nv = polymarket_pair(yes_ask=0.45, no_ask=0.45, depth=200.0)
-    opp = detect_bundle_arbitrage(yv, nv, config=config,
-                                  fee_model=FeeModel(), now=T0)
+    opp = detect_bundle_arbitrage(yv, nv, config=config, fee_model=FeeModel(), now=T0)
     assert opp is not None
     return opp
 
@@ -40,9 +40,9 @@ def test_gate_rejects_zero_quantity(gate, opportunity):
 
 
 def test_gate_rejects_over_max_position(gate, opportunity, config):
-    res = gate.evaluate(opportunity,
-                        config.risk.max_position_per_market + 1,
-                        PortfolioState(), now=T0)
+    res = gate.evaluate(
+        opportunity, config.risk.max_position_per_market + 1, PortfolioState(), now=T0
+    )
     assert not res.allow
     assert "max_position_per_market" in res.reason
 
@@ -61,8 +61,7 @@ def test_gate_rejects_daily_loss_limit(gate, opportunity, config):
 
 
 def test_gate_rejects_stale_books(gate, opportunity):
-    res = gate.evaluate(opportunity, 10.0, PortfolioState(),
-                        book_ages_s=[30.0], now=T0)
+    res = gate.evaluate(opportunity, 10.0, PortfolioState(), book_ages_s=[30.0], now=T0)
     assert not res.allow
     assert "stale" in res.reason or "latency" in res.reason
 

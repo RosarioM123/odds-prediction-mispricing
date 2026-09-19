@@ -27,11 +27,13 @@ size, the full cost waterfall, and net edge, plus any data-quality flags
 (STALE, FEE_RATE_FALLBACK, SPREAD_UNAVAILABLE_NO_BIDS, ...). Simulated
 inputs stay labeled simulated all the way through.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import Any, Final
 
 from backend.arbitrage.costs import (
     FeeModel,
@@ -42,13 +44,10 @@ from backend.arbitrage.costs import (
 )
 from backend.arbitrage.settings import StrategyConfig
 from backend.schemas import (
-    CostBreakdown,
     Market,
-    MarketStatus,
     Opportunity,
     OrderBook,
     Outcome,
-    Venue,
     utcnow,
 )
 
@@ -61,6 +60,40 @@ NO_BIDS_FOR_DIRECT = "NO_BIDS_FOR_DIRECT_LEG"
 MATCH_TOO_WEAK = "MATCH_TOO_WEAK"
 SAME_VENUE = "SAME_VENUE_NOT_CROSS"
 
+#: Default seed for deterministic opportunity IDs. Any entry point that
+#: accepts ``seed`` uses this constant when the caller passes nothing, so
+#: two runs over identical inputs produce byte-identical IDs (and
+#: ``detected_at`` when ``now`` is passed). Pass ``seed=None`` to keep the
+#: pre-2026-09-18 wall-clock timestamp IDs.
+DEFAULT_SEED: Final = 12345
+
+
+class _IdFactory:
+    """Per-call opportunity-ID generator.
+
+    Seeded (``seed`` not None): IDs are
+    ``{strategy}-{venue_tag}-s{seed}-{n:04d}`` where ``n`` counts the
+    opportunities emitted by a single ``detect_all`` call, in emission
+    order -- fully deterministic given (seed, inputs, input order).
+    Unseeded (``seed=None``): wall-clock timestamp IDs, the legacy
+    behavior, kept for live runs where IDs must never repeat.
+    """
+
+    def __init__(self, seed: int | None) -> None:
+        self._seed = seed
+        self._counter = 0
+
+    def next(self, strategy: str, venue_tag: str) -> str:
+        """Emit the next ID for ``strategy``/``venue_tag``.
+
+        Raises:
+            None.
+        """
+        self._counter += 1
+        if self._seed is None:
+            return f"{strategy}-{venue_tag}-{utcnow().strftime('%Y%m%d%H%M%S%f')}"
+        return f"{strategy}-{venue_tag}-s{self._seed}-{self._counter:04d}"
+
 
 @dataclass
 class BookView:
@@ -72,19 +105,38 @@ class BookView:
 
 
 def book_timestamp(view: BookView) -> datetime:
+    """Effective quote time: venue timestamp, falling back to receipt time.
+
+    Raises:
+        None.
+    """
     return view.book.venue_timestamp or view.book.received_timestamp
 
 
 def book_age_seconds(view: BookView, now: datetime) -> float:
+    """Age of the book's quote at ``now``, in seconds.
+
+    Raises:
+        None.
+    """
     return (now - book_timestamp(view)).total_seconds()
 
 
 def is_stale(view: BookView, now: datetime, max_age_s: float) -> bool:
+    """True when the book's quote is older than ``max_age_s``.
+
+    Raises:
+        None.
+    """
     return book_age_seconds(view, now) > max_age_s
 
 
 def dedupe_views(views: list[BookView]) -> list[BookView]:
-    """Drop duplicate (venue, market_id) pairs, keeping the newest quote."""
+    """Drop duplicate (venue, market_id) pairs, keeping the newest quote.
+
+    Raises:
+        None.
+    """
     best: dict[tuple[str, str], BookView] = {}
     for v in views:
         key = (v.market.venue.value, v.market.market_id)
@@ -94,6 +146,11 @@ def dedupe_views(views: list[BookView]) -> list[BookView]:
 
 
 def normalize_question(question: str) -> str:
+    """Lowercase, strip punctuation, collapse whitespace.
+
+    Raises:
+        None.
+    """
     text = question.lower()
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
@@ -107,7 +164,11 @@ class MatchResult:
 
 
 def deterministic_match(a: Market, b: Market) -> MatchResult:
-    """Score whether two markets are the same event, deterministically."""
+    """Score whether two markets are the same event, deterministically.
+
+    Raises:
+        None.
+    """
     if a.venue == b.venue:
         return MatchResult(False, 0.0, [SAME_VENUE])
     qa, qb = normalize_question(a.question), normalize_question(b.question)
@@ -125,49 +186,93 @@ def deterministic_match(a: Market, b: Market) -> MatchResult:
     return MatchResult(True, round(confidence, 3), reasons)
 
 
-def _explain(summary: str, fields: dict) -> dict:
+def _explain(summary: str, fields: dict[str, Any]) -> dict[str, Any]:
     return {"summary": summary, **fields}
 
 
-def _finalize(*, strategy: str, legs: list[dict], size: float,
-              raw_edge_pc: float, fees_total: float, slippage_total: float,
-              spread_info_pc: float, latency_total: float,
-              liquidity: float, match: MatchResult | None,
-              flags: list[str], detail: dict) -> Opportunity:
+def _finalize(
+    *,
+    strategy: str,
+    legs: list[dict[str, Any]],
+    size: float,
+    raw_edge_pc: float,
+    fees_total: float,
+    slippage_total: float,
+    spread_info_pc: float,
+    latency_total: float,
+    liquidity: float,
+    match: MatchResult | None,
+    flags: list[str],
+    detail: dict[str, Any],
+    now: datetime | None = None,
+    id_factory: _IdFactory | None = None,
+) -> Opportunity:
+    """Build the final Opportunity. ``detected_at`` follows ``now`` when
+    given (wall clock otherwise); the opportunity ID is deterministic when
+    ``id_factory`` carries a seed, wall-clock when it does not.
+
+    Raises:
+        None.
+    """
     costs = build_cost_breakdown(
-        raw_edge_per_contract=raw_edge_pc, size=size,
-        fees_total=fees_total, slippage_total=slippage_total,
-        spread_info_per_contract=spread_info_pc, latency_total=latency_total)
-    opp_id = (f"{strategy}-{detail.get('venue_tag', 'x')}-"
-              f"{utcnow().strftime('%Y%m%d%H%M%S%f')}")
+        raw_edge_per_contract=raw_edge_pc,
+        size=size,
+        fees_total=fees_total,
+        slippage_total=slippage_total,
+        spread_info_per_contract=spread_info_pc,
+        latency_total=latency_total,
+    )
+    factory = id_factory if id_factory is not None else _IdFactory(None)
+    opp_id = factory.next(strategy, str(detail.get("venue_tag", "x")))
     return Opportunity(
         opportunity_id=opp_id,
         strategy=strategy,
+        detected_at=now if now is not None else utcnow(),
         legs=legs,
         costs=costs,
         liquidity=round(liquidity, 6),
         match_confidence=match.confidence if match else None,
-        explanation=_explain(detail.pop("summary"), {
-            **detail,
-            "raw_edge_per_contract": round(raw_edge_pc, 6),
-            "fees_per_contract": costs.trading_fees,
-            "slippage_per_contract": costs.slippage,
-            "spread_info_per_contract": costs.spread_cost,
-            "latency_per_contract": costs.latency_adjustment,
-            "net_edge_per_contract": costs.net_edge,
-            "size_contracts": round(size, 6),
-            "flags": sorted(set(flags)),
-            "match_reasons": match.reasons if match else [],
-        }),
+        explanation=_explain(
+            detail.pop("summary"),
+            {
+                **detail,
+                "raw_edge_per_contract": round(raw_edge_pc, 6),
+                "fees_per_contract": costs.trading_fees,
+                "slippage_per_contract": costs.slippage,
+                "spread_info_per_contract": costs.spread_cost,
+                "latency_per_contract": costs.latency_adjustment,
+                "net_edge_per_contract": costs.net_edge,
+                "size_contracts": round(size, 6),
+                "flags": sorted(set(flags)),
+                "match_reasons": match.reasons if match else [],
+            },
+        ),
     )
 
 
-def detect_bundle_arbitrage(yes_view: BookView, no_view: BookView, *,
-                            config: StrategyConfig, fee_model: FeeModel,
-                            now: datetime | None = None,
-                            size_cap: float | None = None) -> Opportunity | None:
-    """Same-event YES/NO bundle arbitrage. Returns None when not executable."""
+def detect_bundle_arbitrage(
+    yes_view: BookView,
+    no_view: BookView,
+    *,
+    config: StrategyConfig,
+    fee_model: FeeModel,
+    now: datetime | None = None,
+    size_cap: float | None = None,
+    seed: int | None = DEFAULT_SEED,
+    id_factory: _IdFactory | None = None,
+) -> Opportunity | None:
+    """Same-event YES/NO bundle arbitrage. Returns None when not executable.
+
+    ``seed`` selects deterministic opportunity IDs (default
+    ``DEFAULT_SEED``); ``None`` keeps wall-clock IDs. ``detected_at``
+    follows ``now`` when given.
+
+    Raises:
+        DataValidationError: if a leg's venue has no fee schedule
+            (unreachable for the known Venue members).
+    """
     now = now or utcnow()
+    factory = id_factory if id_factory is not None else _IdFactory(seed)
     det = config.detection
     flags: list[str] = [f"LABEL_{yes_view.label.upper()}"]
     if yes_view.market.event_id != no_view.market.event_id:
@@ -181,6 +286,8 @@ def detect_bundle_arbitrage(yes_view: BookView, no_view: BookView, *,
             return None
     yes_ask = yes_view.book.best_ask
     no_ask = no_view.book.best_ask
+    if yes_ask is None or no_ask is None:
+        return None  # unreachable: empty asks returned above; narrows the type
     raw_edge = 1.0 - (yes_ask + no_ask)
     if raw_edge <= 0:
         return None
@@ -191,6 +298,8 @@ def detect_bundle_arbitrage(yes_view: BookView, no_view: BookView, *,
 
     walk_y = walk_book(yes_view.book, "buy", size)
     walk_n = walk_book(no_view.book, "buy", size)
+    if walk_y.vwap is None or walk_n.vwap is None:
+        return None  # unreachable: asks are non-empty and size > 0, so the walk fills
     slippage_total = ((walk_y.vwap - yes_ask) + (walk_n.vwap - no_ask)) * size
     fee_y = fee_model.taker_fee(yes_view.market, size, walk_y.vwap)
     fee_n = fee_model.taker_fee(no_view.market, size, walk_n.vwap)
@@ -199,7 +308,8 @@ def detect_bundle_arbitrage(yes_view: BookView, no_view: BookView, *,
     lat_total, lat_notes = latency_adjustment(
         config.total_latency_seconds,
         config.latency.adverse_drift_per_second,
-        config.latency.drift_is_placeholder)
+        config.latency.drift_is_placeholder,
+    )
     latency_total = lat_total * size
     flags.extend(lat_notes)
     spread_y, sy_notes = half_spread_cost(yes_view.book)
@@ -208,20 +318,34 @@ def detect_bundle_arbitrage(yes_view: BookView, no_view: BookView, *,
     spread_info = (spread_y or 0.0) + (spread_n or 0.0)
 
     costs_probe = build_cost_breakdown(
-        raw_edge_per_contract=raw_edge, size=size, fees_total=fees_total,
-        slippage_total=slippage_total, spread_info_per_contract=spread_info,
-        latency_total=latency_total)
+        raw_edge_per_contract=raw_edge,
+        size=size,
+        fees_total=fees_total,
+        slippage_total=slippage_total,
+        spread_info_per_contract=spread_info,
+        latency_total=latency_total,
+    )
     if costs_probe.net_edge < det.min_net_edge:
         return None
 
     venue = yes_view.market.venue.value
-    legs = [
-        {"venue": venue, "market_id": yes_view.market.market_id,
-         "outcome": Outcome.YES.value, "side": "buy",
-         "quantity": round(size, 6), "expected_price": yes_ask},
-        {"venue": no_view.market.venue.value, "market_id": no_view.market.market_id,
-         "outcome": Outcome.NO.value, "side": "buy",
-         "quantity": round(size, 6), "expected_price": no_ask},
+    legs: list[dict[str, Any]] = [
+        {
+            "venue": venue,
+            "market_id": yes_view.market.market_id,
+            "outcome": Outcome.YES.value,
+            "side": "buy",
+            "quantity": round(size, 6),
+            "expected_price": yes_ask,
+        },
+        {
+            "venue": no_view.market.venue.value,
+            "market_id": no_view.market.market_id,
+            "outcome": Outcome.NO.value,
+            "side": "buy",
+            "quantity": round(size, 6),
+            "expected_price": no_ask,
+        },
     ]
     summary = (
         f"Bundle arbitrage on {venue}: buy {size:.0f} YES @ ${yes_ask:.3f} and "
@@ -229,28 +353,58 @@ def detect_bundle_arbitrage(yes_view: BookView, no_view: BookView, *,
         f"${raw_edge:.4f}/contract; fees ${costs_probe.trading_fees:.4f}, "
         f"slippage ${costs_probe.slippage:.4f}, latency "
         f"${costs_probe.latency_adjustment:.4f} -> net "
-        f"${costs_probe.net_edge:.4f}/contract.")
+        f"${costs_probe.net_edge:.4f}/contract."
+    )
     return _finalize(
-        strategy="bundle_arbitrage", legs=legs, size=size,
-        raw_edge_pc=raw_edge, fees_total=fees_total,
-        slippage_total=slippage_total, spread_info_pc=spread_info,
-        latency_total=latency_total, liquidity=depth, match=None,
+        strategy="bundle_arbitrage",
+        legs=legs,
+        size=size,
+        raw_edge_pc=raw_edge,
+        fees_total=fees_total,
+        slippage_total=slippage_total,
+        spread_info_pc=spread_info,
+        latency_total=latency_total,
+        liquidity=depth,
+        match=None,
         flags=flags,
-        detail={"summary": summary, "venue_tag": venue,
-                "event_id": yes_view.market.event_id,
-                "yes_ask": yes_ask, "no_ask": no_ask,
-                "vwap_yes": walk_y.vwap, "vwap_no": walk_n.vwap})
+        now=now,
+        id_factory=factory,
+        detail={
+            "summary": summary,
+            "venue_tag": venue,
+            "event_id": yes_view.market.event_id,
+            "yes_ask": yes_ask,
+            "no_ask": no_ask,
+            "vwap_yes": walk_y.vwap,
+            "vwap_no": walk_n.vwap,
+        },
+    )
 
 
-def detect_cross_venue_direct(buy_view: BookView, sell_view: BookView, *,
-                              config: StrategyConfig, fee_model: FeeModel,
-                              now: datetime | None = None,
-                              size_cap: float | None = None) -> Opportunity | None:
+def detect_cross_venue_direct(
+    buy_view: BookView,
+    sell_view: BookView,
+    *,
+    config: StrategyConfig,
+    fee_model: FeeModel,
+    now: datetime | None = None,
+    size_cap: float | None = None,
+    seed: int | None = DEFAULT_SEED,
+    id_factory: _IdFactory | None = None,
+) -> Opportunity | None:
     """Same outcome, buy on venue A ask, sell on venue B bid.
 
     Skipped (never invented) when the sell venue publishes no bids.
+    ``seed`` selects deterministic opportunity IDs (default
+    ``DEFAULT_SEED``); ``None`` keeps wall-clock IDs. ``detected_at``
+    follows ``now`` when given.
+
+    Raises:
+        DataValidationError: if a leg's venue has no fee schedule
+            (unreachable for the known Venue members).
     """
     now = now or utcnow()
+    factory = id_factory if id_factory is not None else _IdFactory(seed)
     cv = config.cross_venue
     det = config.detection
     match = deterministic_match(buy_view.market, sell_view.market)
@@ -266,6 +420,8 @@ def detect_cross_venue_direct(buy_view: BookView, sell_view: BookView, *,
         return None  # NO_BIDS_FOR_DIRECT: refuse to invent a sell price
     ask = buy_view.book.best_ask
     bid = sell_view.book.best_bid
+    if ask is None or bid is None:
+        return None  # unreachable: empty asks/bids returned above; narrows the type
     raw_edge = bid - ask
     if raw_edge <= 0:
         return None
@@ -276,6 +432,8 @@ def detect_cross_venue_direct(buy_view: BookView, sell_view: BookView, *,
 
     walk_buy = walk_book(buy_view.book, "buy", size)
     walk_sell = walk_book(sell_view.book, "sell", size)
+    if walk_buy.vwap is None or walk_sell.vwap is None:
+        return None  # unreachable: sides are non-empty and size > 0, so the walks fill
     slippage_total = ((walk_buy.vwap - ask) + (bid - walk_sell.vwap)) * size
     fee_b = fee_model.taker_fee(buy_view.market, size, walk_buy.vwap)
     fee_s = fee_model.taker_fee(sell_view.market, size, walk_sell.vwap)
@@ -284,28 +442,41 @@ def detect_cross_venue_direct(buy_view: BookView, sell_view: BookView, *,
     lat_total, lat_notes = latency_adjustment(
         config.total_latency_seconds,
         config.latency.adverse_drift_per_second,
-        config.latency.drift_is_placeholder)
+        config.latency.drift_is_placeholder,
+    )
     flags.extend(lat_notes)
     spread_b, _ = half_spread_cost(buy_view.book)
     spread_s, _ = half_spread_cost(sell_view.book)
     spread_info = (spread_b or 0.0) + (spread_s or 0.0)
 
     costs_probe = build_cost_breakdown(
-        raw_edge_per_contract=raw_edge, size=size, fees_total=fees_total,
-        slippage_total=slippage_total, spread_info_per_contract=spread_info,
-        latency_total=lat_total * size)
+        raw_edge_per_contract=raw_edge,
+        size=size,
+        fees_total=fees_total,
+        slippage_total=slippage_total,
+        spread_info_per_contract=spread_info,
+        latency_total=lat_total * size,
+    )
     if costs_probe.net_edge < cv.min_net_edge:
         return None
 
-    legs = [
-        {"venue": buy_view.market.venue.value,
-         "market_id": buy_view.market.market_id,
-         "outcome": buy_view.market.outcome.value, "side": "buy",
-         "quantity": round(size, 6), "expected_price": ask},
-        {"venue": sell_view.market.venue.value,
-         "market_id": sell_view.market.market_id,
-         "outcome": sell_view.market.outcome.value, "side": "sell",
-         "quantity": round(size, 6), "expected_price": bid},
+    legs: list[dict[str, Any]] = [
+        {
+            "venue": buy_view.market.venue.value,
+            "market_id": buy_view.market.market_id,
+            "outcome": buy_view.market.outcome.value,
+            "side": "buy",
+            "quantity": round(size, 6),
+            "expected_price": ask,
+        },
+        {
+            "venue": sell_view.market.venue.value,
+            "market_id": sell_view.market.market_id,
+            "outcome": sell_view.market.outcome.value,
+            "side": "sell",
+            "quantity": round(size, 6),
+            "expected_price": bid,
+        },
     ]
     summary = (
         f"Cross-venue arbitrage ({buy_view.market.venue.value} -> "
@@ -313,28 +484,56 @@ def detect_cross_venue_direct(buy_view: BookView, sell_view: BookView, *,
         f"{match.confidence:.2f}): buy {size:.0f} "
         f"{buy_view.market.outcome.value} @ ${ask:.3f}, sell @ ${bid:.3f}. "
         f"Raw edge ${raw_edge:.4f}/contract -> net "
-        f"${costs_probe.net_edge:.4f}/contract after costs.")
+        f"${costs_probe.net_edge:.4f}/contract after costs."
+    )
     return _finalize(
-        strategy="cross_venue_arbitrage", legs=legs, size=size,
-        raw_edge_pc=raw_edge, fees_total=fees_total,
-        slippage_total=slippage_total, spread_info_pc=spread_info,
-        latency_total=lat_total * size, liquidity=depth, match=match,
+        strategy="cross_venue_arbitrage",
+        legs=legs,
+        size=size,
+        raw_edge_pc=raw_edge,
+        fees_total=fees_total,
+        slippage_total=slippage_total,
+        spread_info_pc=spread_info,
+        latency_total=lat_total * size,
+        liquidity=depth,
+        match=match,
         flags=flags,
-        detail={"summary": summary,
-                "venue_tag": f"{buy_view.market.venue.value}-{sell_view.market.venue.value}",
-                "buy_ask": ask, "sell_bid": bid,
-                "match_confidence": match.confidence})
+        now=now,
+        id_factory=factory,
+        detail={
+            "summary": summary,
+            "venue_tag": f"{buy_view.market.venue.value}-{sell_view.market.venue.value}",
+            "buy_ask": ask,
+            "sell_bid": bid,
+            "match_confidence": match.confidence,
+        },
+    )
 
 
-def detect_cross_venue_complement(yes_view: BookView, no_view: BookView, *,
-                                  config: StrategyConfig, fee_model: FeeModel,
-                                  now: datetime | None = None,
-                                  size_cap: float | None = None) -> Opportunity | None:
+def detect_cross_venue_complement(
+    yes_view: BookView,
+    no_view: BookView,
+    *,
+    config: StrategyConfig,
+    fee_model: FeeModel,
+    now: datetime | None = None,
+    size_cap: float | None = None,
+    seed: int | None = DEFAULT_SEED,
+    id_factory: _IdFactory | None = None,
+) -> Opportunity | None:
     """Buy YES on venue A and NO on venue B for the same event.
 
     Needs only asks, so it works even when a venue publishes no bids.
+    ``seed`` selects deterministic opportunity IDs (default
+    ``DEFAULT_SEED``); ``None`` keeps wall-clock IDs. ``detected_at``
+    follows ``now`` when given.
+
+    Raises:
+        DataValidationError: if a leg's venue has no fee schedule
+            (unreachable for the known Venue members).
     """
     now = now or utcnow()
+    factory = id_factory if id_factory is not None else _IdFactory(seed)
     cv = config.cross_venue
     det = config.detection
     match = deterministic_match(yes_view.market, no_view.market)
@@ -348,6 +547,8 @@ def detect_cross_venue_complement(yes_view: BookView, no_view: BookView, *,
             return None
     yes_ask = yes_view.book.best_ask
     no_ask = no_view.book.best_ask
+    if yes_ask is None or no_ask is None:
+        return None  # unreachable: empty asks returned above; narrows the type
     raw_edge = 1.0 - (yes_ask + no_ask)
     if raw_edge <= 0:
         return None
@@ -358,6 +559,8 @@ def detect_cross_venue_complement(yes_view: BookView, no_view: BookView, *,
 
     walk_y = walk_book(yes_view.book, "buy", size)
     walk_n = walk_book(no_view.book, "buy", size)
+    if walk_y.vwap is None or walk_n.vwap is None:
+        return None  # unreachable: asks are non-empty and size > 0, so the walks fill
     slippage_total = ((walk_y.vwap - yes_ask) + (walk_n.vwap - no_ask)) * size
     fee_y = fee_model.taker_fee(yes_view.market, size, walk_y.vwap)
     fee_n = fee_model.taker_fee(no_view.market, size, walk_n.vwap)
@@ -366,7 +569,8 @@ def detect_cross_venue_complement(yes_view: BookView, no_view: BookView, *,
     lat_total, lat_notes = latency_adjustment(
         config.total_latency_seconds,
         config.latency.adverse_drift_per_second,
-        config.latency.drift_is_placeholder)
+        config.latency.drift_is_placeholder,
+    )
     flags.extend(lat_notes)
     spread_info = 0.0
     for v in (yes_view, no_view):
@@ -375,21 +579,33 @@ def detect_cross_venue_complement(yes_view: BookView, no_view: BookView, *,
         flags.extend(s_notes)
 
     costs_probe = build_cost_breakdown(
-        raw_edge_per_contract=raw_edge, size=size, fees_total=fees_total,
-        slippage_total=slippage_total, spread_info_per_contract=spread_info,
-        latency_total=lat_total * size)
+        raw_edge_per_contract=raw_edge,
+        size=size,
+        fees_total=fees_total,
+        slippage_total=slippage_total,
+        spread_info_per_contract=spread_info,
+        latency_total=lat_total * size,
+    )
     if costs_probe.net_edge < cv.min_net_edge:
         return None
 
-    legs = [
-        {"venue": yes_view.market.venue.value,
-         "market_id": yes_view.market.market_id,
-         "outcome": Outcome.YES.value, "side": "buy",
-         "quantity": round(size, 6), "expected_price": yes_ask},
-        {"venue": no_view.market.venue.value,
-         "market_id": no_view.market.market_id,
-         "outcome": Outcome.NO.value, "side": "buy",
-         "quantity": round(size, 6), "expected_price": no_ask},
+    legs: list[dict[str, Any]] = [
+        {
+            "venue": yes_view.market.venue.value,
+            "market_id": yes_view.market.market_id,
+            "outcome": Outcome.YES.value,
+            "side": "buy",
+            "quantity": round(size, 6),
+            "expected_price": yes_ask,
+        },
+        {
+            "venue": no_view.market.venue.value,
+            "market_id": no_view.market.market_id,
+            "outcome": Outcome.NO.value,
+            "side": "buy",
+            "quantity": round(size, 6),
+            "expected_price": no_ask,
+        },
     ]
     summary = (
         f"Cross-venue complement arbitrage ({yes_view.market.venue.value} YES "
@@ -397,29 +613,59 @@ def detect_cross_venue_complement(yes_view: BookView, no_view: BookView, *,
         f"{match.confidence:.2f}): buy {size:.0f} YES @ ${yes_ask:.3f} and "
         f"{size:.0f} NO @ ${no_ask:.3f}; pair settles to $1.00. Raw edge "
         f"${raw_edge:.4f}/contract -> net "
-        f"${costs_probe.net_edge:.4f}/contract after costs.")
+        f"${costs_probe.net_edge:.4f}/contract after costs."
+    )
     return _finalize(
-        strategy="cross_venue_arbitrage", legs=legs, size=size,
-        raw_edge_pc=raw_edge, fees_total=fees_total,
-        slippage_total=slippage_total, spread_info_pc=spread_info,
-        latency_total=lat_total * size, liquidity=depth, match=match,
+        strategy="cross_venue_arbitrage",
+        legs=legs,
+        size=size,
+        raw_edge_pc=raw_edge,
+        fees_total=fees_total,
+        slippage_total=slippage_total,
+        spread_info_pc=spread_info,
+        latency_total=lat_total * size,
+        liquidity=depth,
+        match=match,
         flags=flags,
-        detail={"summary": summary,
-                "venue_tag": f"{yes_view.market.venue.value}-{no_view.market.venue.value}",
-                "yes_ask": yes_ask, "no_ask": no_ask,
-                "match_confidence": match.confidence})
+        now=now,
+        id_factory=factory,
+        detail={
+            "summary": summary,
+            "venue_tag": f"{yes_view.market.venue.value}-{no_view.market.venue.value}",
+            "yes_ask": yes_ask,
+            "no_ask": no_ask,
+            "match_confidence": match.confidence,
+        },
+    )
 
 
-def detect_all(views: list[BookView], *, config: StrategyConfig,
-               fee_model: FeeModel, now: datetime | None = None,
-               size_cap: float | None = None) -> tuple[list[Opportunity], list[str]]:
+def detect_all(
+    views: list[BookView],
+    *,
+    config: StrategyConfig,
+    fee_model: FeeModel,
+    now: datetime | None = None,
+    size_cap: float | None = None,
+    seed: int | None = DEFAULT_SEED,
+) -> tuple[list[Opportunity], list[str]]:
     """Run every detector over a set of views.
 
     Handles duplicates (keeps newest), skips events with conflicting
     metadata, and returns (opportunities, global_flags).
+
+    Seed contract: one ``_IdFactory`` is created per call, so the
+    opportunity-ID counter is shared across the bundle and cross-venue
+    loops -- IDs are unique within this call and deterministic given
+    (seed, views, view order). ``seed=None`` keeps legacy wall-clock IDs.
+    ``detected_at`` follows ``now`` when given, wall clock otherwise.
+
+    Raises:
+        DataValidationError: if a leg's venue has no fee schedule
+            (unreachable for the known Venue members).
     """
     now = now or utcnow()
     views = dedupe_views(views)
+    id_factory = _IdFactory(seed)
     global_flags: list[str] = []
 
     # Group by event; conflicting questions within an event -> skip group.
@@ -440,36 +686,60 @@ def detect_all(views: list[BookView], *, config: StrategyConfig,
     for v in usable:
         key = (v.market.venue.value, v.market.event_id)
         by_venue_event.setdefault(key, {})[v.market.outcome.value] = v
-    for (venue, _event), outcomes in by_venue_event.items():
+    for (_venue, _event), outcomes in by_venue_event.items():
         if Outcome.YES.value in outcomes and Outcome.NO.value in outcomes:
             opp = detect_bundle_arbitrage(
-                outcomes[Outcome.YES.value], outcomes[Outcome.NO.value],
-                config=config, fee_model=fee_model, now=now, size_cap=size_cap)
+                outcomes[Outcome.YES.value],
+                outcomes[Outcome.NO.value],
+                config=config,
+                fee_model=fee_model,
+                now=now,
+                size_cap=size_cap,
+                id_factory=id_factory,
+            )
             if opp:
                 opportunities.append(opp)
 
     # 2. Cross-venue pairs.
     for i, va in enumerate(usable):
-        for vb in usable[i + 1:]:
+        for vb in usable[i + 1 :]:
             if va.market.venue == vb.market.venue:
                 continue
             if va.market.outcome == vb.market.outcome:
                 opp = detect_cross_venue_direct(
-                    va, vb, config=config, fee_model=fee_model,
-                    now=now, size_cap=size_cap)
+                    va,
+                    vb,
+                    config=config,
+                    fee_model=fee_model,
+                    now=now,
+                    size_cap=size_cap,
+                    id_factory=id_factory,
+                )
                 if opp:
                     opportunities.append(opp)
                 # also try the reverse direction
                 opp = detect_cross_venue_direct(
-                    vb, va, config=config, fee_model=fee_model,
-                    now=now, size_cap=size_cap)
+                    vb,
+                    va,
+                    config=config,
+                    fee_model=fee_model,
+                    now=now,
+                    size_cap=size_cap,
+                    id_factory=id_factory,
+                )
                 if opp:
                     opportunities.append(opp)
             else:
                 yes_v, no_v = (va, vb) if va.market.outcome == Outcome.YES else (vb, va)
                 opp = detect_cross_venue_complement(
-                    yes_v, no_v, config=config, fee_model=fee_model,
-                    now=now, size_cap=size_cap)
+                    yes_v,
+                    no_v,
+                    config=config,
+                    fee_model=fee_model,
+                    now=now,
+                    size_cap=size_cap,
+                    id_factory=id_factory,
+                )
                 if opp:
                     opportunities.append(opp)
 

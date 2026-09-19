@@ -4,31 +4,40 @@ Every venue adapter (Polymarket, Kalshi) converts its native API payloads into
 these models. Downstream code (arbitrage detection, cost modeling, execution
 simulation) only ever sees these types and never touches venue-specific JSON.
 """
-from datetime import datetime, timezone
-from enum import Enum
+
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from backend.errors import DataValidationError
 
-class Venue(str, Enum):
+
+class Venue(StrEnum):
     POLYMARKET = "polymarket"
     KALSHI = "kalshi"
 
 
-class MarketStatus(str, Enum):
+class MarketStatus(StrEnum):
     OPEN = "open"
     CLOSED = "closed"
     SETTLED = "settled"
     UNKNOWN = "unknown"
 
 
-class Outcome(str, Enum):
+class Outcome(StrEnum):
     YES = "YES"
     NO = "NO"
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    """Current UTC time. Test seam: detectors accept ``now`` explicitly.
+
+    Raises:
+        None.
+    """
+    return datetime.now(UTC)
 
 
 class OrderBookLevel(BaseModel):
@@ -58,7 +67,7 @@ class OrderBook(BaseModel):
     def _bids_sorted(cls, v: list[OrderBookLevel]) -> list[OrderBookLevel]:
         prices = [lvl.price for lvl in v]
         if prices != sorted(prices, reverse=True):
-            raise ValueError("bids must be sorted best-first (descending price)")
+            raise DataValidationError("bids must be sorted best-first (descending price)")
         return v
 
     @field_validator("asks")
@@ -66,35 +75,65 @@ class OrderBook(BaseModel):
     def _asks_sorted(cls, v: list[OrderBookLevel]) -> list[OrderBookLevel]:
         prices = [lvl.price for lvl in v]
         if prices != sorted(prices):
-            raise ValueError("asks must be sorted best-first (ascending price)")
+            raise DataValidationError("asks must be sorted best-first (ascending price)")
         return v
 
     @property
     def best_bid(self) -> float | None:
+        """Best bid price, or None when the book has no bids.
+
+        Raises:
+            None.
+        """
         return self.bids[0].price if self.bids else None
 
     @property
     def best_ask(self) -> float | None:
+        """Best ask price, or None when the book has no asks.
+
+        Raises:
+            None.
+        """
         return self.asks[0].price if self.asks else None
 
     @property
     def spread(self) -> float | None:
+        """Ask minus bid, or None when either side is missing.
+
+        Raises:
+            None.
+        """
         if self.best_bid is None or self.best_ask is None:
             return None
         return round(self.best_ask - self.best_bid, 6)
 
     @property
     def mid_price(self) -> float | None:
+        """Midpoint of best bid/ask, or None when either side is missing.
+
+        Raises:
+            None.
+        """
         if self.best_bid is None or self.best_ask is None:
             return None
         return round((self.best_bid + self.best_ask) / 2, 6)
 
     @property
     def bid_depth(self) -> float:
+        """Total resting bid size in contracts.
+
+        Raises:
+            None.
+        """
         return round(sum(lvl.size for lvl in self.bids), 6)
 
     @property
     def ask_depth(self) -> float:
+        """Total resting ask size in contracts.
+
+        Raises:
+            None.
+        """
         return round(sum(lvl.size for lvl in self.asks), 6)
 
 
@@ -115,7 +154,7 @@ class Market(BaseModel):
         description="Resolved taker fee rate for this market, if known. "
         "Polymarket: from GET /fee-rate per token. Kalshi: formula-based.",
     )
-    raw: dict = Field(
+    raw: dict[str, Any] = Field(
         default_factory=dict,
         description="Venue-native payload preserved for auditability.",
     )
@@ -146,19 +185,41 @@ class LatencyBreakdown(BaseModel):
 
     @property
     def data_latency_ms(self) -> float:
+        """Market-data to detection latency in milliseconds.
+
+        Raises:
+            None.
+        """
         return (self.detection_timestamp - self.market_data_timestamp).total_seconds() * 1000
 
     @property
     def processing_latency_ms(self) -> float:
+        """Detection to decision latency in milliseconds.
+
+        Raises:
+            None.
+        """
         return (self.decision_timestamp - self.detection_timestamp).total_seconds() * 1000
 
     @property
     def execution_latency_ms(self) -> float:
+        """Decision to simulated execution latency in milliseconds.
+
+        Raises:
+            None.
+        """
         return (self.simulated_execution_timestamp - self.decision_timestamp).total_seconds() * 1000
 
     @property
     def total_latency_ms(self) -> float:
-        return (self.simulated_execution_timestamp - self.market_data_timestamp).total_seconds() * 1000
+        """End-to-end market-data to simulated execution latency in ms.
+
+        Raises:
+            None.
+        """
+        return (
+            self.simulated_execution_timestamp - self.market_data_timestamp
+        ).total_seconds() * 1000
 
 
 class Opportunity(BaseModel):
@@ -167,7 +228,7 @@ class Opportunity(BaseModel):
     opportunity_id: str
     strategy: str  # "bundle_arbitrage" | "cross_venue_arbitrage"
     detected_at: datetime = Field(default_factory=utcnow)
-    legs: list[dict] = Field(
+    legs: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Each leg: venue, market_id, outcome, side, quantity, expected_price.",
     )
@@ -175,10 +236,10 @@ class Opportunity(BaseModel):
     liquidity: float = Field(ge=0.0)
     match_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     decision: str = "PENDING"  # PAPER_EXECUTE | REJECTED | PENDING
-    explanation: dict = Field(default_factory=dict)
+    explanation: dict[str, Any] = Field(default_factory=dict)
 
 
-class PaperTradeStatus(str, Enum):
+class PaperTradeStatus(StrEnum):
     FILLED = "FILLED"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
     MISSED = "MISSED"
@@ -198,7 +259,8 @@ class PaperTrade(BaseModel):
     expected_price: float
     simulated_fill_price: float
     filled_quantity: float = Field(
-        default=0.0, ge=0.0,
+        default=0.0,
+        ge=0.0,
         description="Contracts actually filled; < quantity on PARTIALLY_FILLED.",
     )
     fees: float = 0.0
