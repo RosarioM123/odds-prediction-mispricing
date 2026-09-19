@@ -81,7 +81,7 @@ Full notes and sources: `docs/api-research.md`.
 ## Standing caveats (read before trusting any number)
 
 - **Kalshi bids remain empty** — public bid/ask semantics were not sufficiently verified, so the Kalshi side of the book is asks-only until that changes.
-- **Polymarket `base_fee / 10000` is provisional** — treated as a working assumption, not a verified constant.
+- **Polymarket `base_fee / 10000` verified** — the official CLOB OpenAPI spec defines `base_fee` as basis points; conversion confirmed 2026-09-18 (per-token taker rate, takers only, makers pay 0).
 - **AI may propose matches but cannot authorize trades** — matching suggestions are advisory; there is no autonomous order path.
 - **No real-money order path exists** — paper execution only, by design.
 - Latency drift and empirical slippage coefficients are placeholders until calibrated on real snapshots (labeled as such in config).
