@@ -8,12 +8,17 @@
 polymarket:
   # Official fee page: https://docs.polymarket.com/trading/fees
   # Per-token live rate (authoritative, do NOT hardcode):
-  #   GET https://clob.polymarket.com/fee-rate?token_id={id} -> {"base_fee": bps}
+  #   GET https://clob.polymarket.com/fee-rate?token_id={id} -> {"base_fee": <basis points>}
+  # Verified 2026-09-18: the official CLOB OpenAPI spec defines
+  # FeeRate.base_fee as "Base fee in basis points"
+  # (https://docs.polymarket.com/api-spec/clob-openapi.yaml), so
+  # feeRate = base_fee / 10000. The rate is per token and applies at match
+  # time to taker fills only; makers pay 0.
   formula: "fee = C * fee_rate * (p * (1 - p)) ** exponent"
   variables:
     C: "number of shares traded"
     p: "share price in dollars"
-    fee_rate: "per-market taker rate; resolve live via /fee-rate"
+    fee_rate: "per-token taker rate (decimal); resolve live via /fee-rate as base_fee/10000"
     exponent: "per-market exponent (commonly 1)"
   maker_fee: 0.0
   maker_note: "Makers pay no fee; taker fees fund daily maker rebates."
