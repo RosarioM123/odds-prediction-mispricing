@@ -9,7 +9,10 @@ Strategies
 2. Cross-venue arbitrage (deterministic match first):
    a. Direct: same outcome, buy on venue A's ask, sell on venue B's bid
       when bid_B > ask_A. Requires real bids on the sell side; a venue
-      whose public book has no bids (Kalshi) is skipped, never invented.
+      that genuinely publishes no bids is skipped, never invented.
+      (Kalshi books carry bids since the 2026-09-18 adapter fix:
+      ladders normalize to bids, asks are the documented 1-bid
+      complement.)
    b. Complement: buy YES on venue A and NO on venue B when
       ask_YES_A + ask_NO_B < 1. Works without any bids.
 
