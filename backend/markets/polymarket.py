@@ -10,7 +10,7 @@ Verified response shapes (2026-09-18, see docs/api-research.md):
   /book -> {"market", "asset_id", "timestamp" (ms, str), "hash",
             "bids": [{"price": str, "size": str}],   # worst-first
             "asks": [{"price": str, "size": str}]}   # worst-first
-  /fee-rate -> {"base_fee": int}      # e.g. 0, 1000
+  /fee-rate -> {"base_fee": int}      # e.g. 0, 1000 — basis points
   /tick-size -> {"minimum_tick_size": float}
 """
 from __future__ import annotations
@@ -165,9 +165,12 @@ class PolymarketAdapter(MarketDataAdapter):
 
         The official docs warn against hardcoding rates; this caches the
         resolved rate for 6h and falls back to the Gamma-provided rate.
-        NOTE: observed `base_fee` values (e.g. 1000) are coarse relative to
-        the documented per-category formula rates; Phase 7 pins down the
-        exact application of this value in the cost model.
+        The official CLOB OpenAPI spec defines ``FeeRate.base_fee`` as
+        "Base fee in basis points" (verified 2026-09-18:
+        https://docs.polymarket.com/api-spec/clob-openapi.yaml), so
+        ``base_fee / 10000`` is the decimal taker fee rate. The rate is per
+        token and applies at match time to taker fills only; makers pay 0
+        (https://docs.polymarket.com/trading/fees).
         """
         now = time.time()
         cached = self._fee_cache.get(market.market_id)
