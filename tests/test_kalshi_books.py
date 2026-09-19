@@ -11,6 +11,7 @@ BIDS, and asks are the documented complement: "a bid for yes at price X is
 equivalent to an ask for no at price (100-X) ... with identical contract
 sizes" (a yes order and a no order whose prices sum to $1 form a trade).
 """
+
 import pytest
 
 import backend.markets.kalshi as kal
@@ -80,48 +81,48 @@ def test_yes_ladder_normalizes_to_bids_best_first():
     """Regression: the yes ladder IS the bid side (official semantics)."""
     book = make_adapter().normalize_order_book(CLASSIC_BOOK, yes_market())
     assert book.outcome == Outcome.YES
-    assert [l.price for l in book.bids] == pytest.approx([0.53, 0.52])
-    assert [l.size for l in book.bids] == pytest.approx([200, 100])
+    assert [level.price for level in book.bids] == pytest.approx([0.53, 0.52])
+    assert [level.size for level in book.bids] == pytest.approx([200, 100])
 
 
 def test_no_ladder_normalizes_to_bids_best_first():
     book = make_adapter().normalize_order_book(CLASSIC_BOOK, no_market())
     assert book.outcome == Outcome.NO
-    assert [l.price for l in book.bids] == pytest.approx([0.48, 0.47])
-    assert [l.size for l in book.bids] == pytest.approx([150, 250])
+    assert [level.price for level in book.bids] == pytest.approx([0.48, 0.47])
+    assert [level.size for level in book.bids] == pytest.approx([150, 250])
 
 
 def test_asks_are_opposite_side_complement():
     """YES ask = 1 - NO bid; NO ask = 1 - YES bid (documented equivalence)."""
     yes_book = make_adapter().normalize_order_book(CLASSIC_BOOK, yes_market())
-    assert [l.price for l in yes_book.asks] == pytest.approx([0.52, 0.53])
-    assert [l.size for l in yes_book.asks] == pytest.approx([150, 250])
+    assert [level.price for level in yes_book.asks] == pytest.approx([0.52, 0.53])
+    assert [level.size for level in yes_book.asks] == pytest.approx([150, 250])
 
     no_book = make_adapter().normalize_order_book(CLASSIC_BOOK, no_market())
-    assert [l.price for l in no_book.asks] == pytest.approx([0.47, 0.48])
-    assert [l.size for l in no_book.asks] == pytest.approx([200, 100])
+    assert [level.price for level in no_book.asks] == pytest.approx([0.47, 0.48])
+    assert [level.size for level in no_book.asks] == pytest.approx([200, 100])
 
 
 def test_docs_example_yes_bid_7c_implies_no_ask_93c():
     """The official spec's example: yes bid 7c == no ask 93c, same size."""
     yes_book = make_adapter().normalize_order_book(DOCS_EXAMPLE_BOOK, yes_market())
-    assert [l.price for l in yes_book.bids] == pytest.approx([0.07])
+    assert [level.price for level in yes_book.bids] == pytest.approx([0.07])
     assert yes_book.asks == []  # no NO bids to derive from
 
     no_book = make_adapter().normalize_order_book(DOCS_EXAMPLE_BOOK, no_market())
     assert no_book.bids == []
-    assert [l.price for l in no_book.asks] == pytest.approx([0.93])
-    assert [l.size for l in no_book.asks] == pytest.approx([100.0])
+    assert [level.price for level in no_book.asks] == pytest.approx([0.93])
+    assert [level.size for level in no_book.asks] == pytest.approx([100.0])
 
 
 def test_fp_string_values_parse():
     """Official spec encodes fp levels as decimal strings."""
     book = make_adapter().normalize_order_book(FP_BOOK_STRINGS, yes_market())
-    assert [l.price for l in book.bids] == pytest.approx([0.15, 0.14])
-    assert [l.size for l in book.bids] == pytest.approx([100.0, 50.0])
+    assert [level.price for level in book.bids] == pytest.approx([0.15, 0.14])
+    assert [level.size for level in book.bids] == pytest.approx([100.0, 50.0])
     # YES ask derives from the single NO bid at 0.86 -> 0.14
-    assert [l.price for l in book.asks] == pytest.approx([0.14])
-    assert [l.size for l in book.asks] == pytest.approx([75.0])
+    assert [level.price for level in book.asks] == pytest.approx([0.14])
+    assert [level.size for level in book.asks] == pytest.approx([75.0])
 
 
 def test_empty_book_is_graceful():
@@ -153,13 +154,14 @@ def test_bundle_edge_uses_correct_side_prices():
 
 def test_fetch_order_book_end_to_end(monkeypatch):
     """fetch_order_book -> normalize path carries the bid semantics."""
+
     def fake_get(url, params=None, **kwargs):
         assert url.endswith("/markets/FED-25DEC-CUT/orderbook")
         return FP_BOOK_STRINGS
 
     monkeypatch.setattr(kal, "get_json", fake_get)
     book = make_adapter().fetch_order_book(yes_market())
-    assert [l.price for l in book.bids] == pytest.approx([0.15, 0.14])
+    assert [level.price for level in book.bids] == pytest.approx([0.15, 0.14])
 
 
 def test_yes_market_status_open():

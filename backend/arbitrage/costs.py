@@ -24,11 +24,13 @@ Verified 2026-09-18 (see configs/fees.yaml):
     opportunity is labeled FEE_RATE_FALLBACK.
   * The latency drift rate is a placeholder until calibrated (Phase 9+).
 """
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
 
+from backend.errors import DataValidationError
 from backend.schemas import CostBreakdown, Market, OrderBook, Venue
 
 # Labels attached to cost breakdowns / explanations.
@@ -68,10 +70,19 @@ class FeeModel:
     """
 
     def __init__(self, fallback_taker_rate: float = _FALLBACK_TAKER_RATE) -> None:
+        """Create a fee model with the given fallback taker rate.
+
+        Raises:
+            None.
+        """
         self.fallback_taker_rate = fallback_taker_rate
 
     def resolve_taker_rate(self, market: Market) -> tuple[float | None, list[str]]:
-        """Return (taker_rate, notes). Falls back to 0.05 with a label."""
+        """Return (taker_rate, notes). Falls back to 0.05 with a label.
+
+        Raises:
+            None.
+        """
         notes: list[str] = []
         rate = market.taker_fee_rate
         if rate is None:
@@ -84,35 +95,50 @@ class FeeModel:
             notes.append(POLYMARKET_FEE_VERIFIED)
         return rate, notes
 
-    def taker_fee(self, market: Market, contracts: float, price: float,
-                  *, multiplier: float = 1.0, exponent: float = 1.0) -> FeeQuote:
-        """Taker fee in dollars for buying ``contracts`` at ``price``."""
+    def taker_fee(
+        self,
+        market: Market,
+        contracts: float,
+        price: float,
+        *,
+        multiplier: float = 1.0,
+        exponent: float = 1.0,
+    ) -> FeeQuote:
+        """Taker fee in dollars for buying ``contracts`` at ``price``.
+
+        Raises:
+            DataValidationError: if the market's venue has no fee schedule.
+        """
         notes: list[str] = []
         if market.venue == Venue.POLYMARKET:
             rate, rate_notes = self.resolve_taker_rate(market)
             notes.extend(rate_notes)
             raw = contracts * (rate or 0.0) * (price * (1.0 - price)) ** exponent
             fee = raw if raw >= _POLYMARKET_MIN_FEE_USDC else 0.0
-            return FeeQuote(market.venue, contracts, price, round(fee, 6),
-                            rate, notes)
+            return FeeQuote(market.venue, contracts, price, round(fee, 6), rate, notes)
         if market.venue == Venue.KALSHI:
             raw = multiplier * 0.07 * contracts * price * (1.0 - price)
             fee = math.ceil(raw * 100) / 100.0  # round UP to the cent
-            return FeeQuote(market.venue, contracts, price, round(fee, 6),
-                            None, notes)
-        raise ValueError(f"unknown venue {market.venue}")
+            return FeeQuote(market.venue, contracts, price, round(fee, 6), None, notes)
+        raise DataValidationError(f"unknown venue {market.venue}")
 
-    def maker_fee(self, market: Market, contracts: float, price: float,
-                  *, multiplier: float = 1.0) -> FeeQuote:
-        """Maker fee in dollars (Kalshi designated series; Polymarket: 0)."""
+    def maker_fee(
+        self, market: Market, contracts: float, price: float, *, multiplier: float = 1.0
+    ) -> FeeQuote:
+        """Maker fee in dollars (Kalshi designated series; Polymarket: 0).
+
+        Raises:
+            DataValidationError: if the market's venue has no fee schedule.
+        """
         if market.venue == Venue.POLYMARKET:
             return FeeQuote(market.venue, contracts, price, 0.0, 0.0, [])
         if market.venue == Venue.KALSHI:
             raw = multiplier * 0.0175 * contracts * price * (1.0 - price)
             fee = math.ceil(raw * 100) / 100.0
-            return FeeQuote(market.venue, contracts, price, round(fee, 6),
-                            None, ["KALSHI_MAKER_SERIES_ONLY"])
-        raise ValueError(f"unknown venue {market.venue}")
+            return FeeQuote(
+                market.venue, contracts, price, round(fee, 6), None, ["KALSHI_MAKER_SERIES_ONLY"]
+            )
+        raise DataValidationError(f"unknown venue {market.venue}")
 
 
 @dataclass
@@ -131,9 +157,12 @@ def walk_book(book: OrderBook, side: str, size: float) -> WalkResult:
     side="buy" consumes asks best-first; side="sell" consumes bids
     best-first. Returns the VWAP of whatever could be filled plus any
     shortfall. An empty relevant side yields filled=0.
+
+    Raises:
+        DataValidationError: if ``side`` is not "buy" or "sell".
     """
     if side not in ("buy", "sell"):
-        raise ValueError("side must be 'buy' or 'sell'")
+        raise DataValidationError("side must be 'buy' or 'sell'")
     if size <= 0:
         return WalkResult(filled=0.0, shortfall=0.0, vwap=None, levels_used=0)
     levels = book.asks if side == "buy" else book.bids
@@ -151,38 +180,56 @@ def walk_book(book: OrderBook, side: str, size: float) -> WalkResult:
         used += 1
     if filled <= 0:
         return WalkResult(filled=0.0, shortfall=size, vwap=None, levels_used=0)
-    return WalkResult(filled=round(filled, 6), shortfall=round(remaining, 6),
-                      vwap=round(notional / filled, 6), levels_used=used)
+    return WalkResult(
+        filled=round(filled, 6),
+        shortfall=round(remaining, 6),
+        vwap=round(notional / filled, 6),
+        levels_used=used,
+    )
 
 
 def half_spread_cost(book: OrderBook) -> tuple[float | None, list[str]]:
-    """Half-spread per contract vs mid, or (None, [flag]) when unavailable."""
+    """Half-spread per contract vs mid, or (None, [flag]) when unavailable.
+
+    Raises:
+        None.
+    """
     if book.best_bid is None or book.best_ask is None:
         return None, [SPREAD_UNAVAILABLE]
     return round((book.best_ask - book.best_bid) / 2.0, 6), []
 
 
-def latency_adjustment(latency_seconds: float, drift_per_second: float,
-                       drift_is_placeholder: bool) -> tuple[float, list[str]]:
-    """Expected adverse price move over the latency budget."""
+def latency_adjustment(
+    latency_seconds: float, drift_per_second: float, drift_is_placeholder: bool
+) -> tuple[float, list[str]]:
+    """Expected adverse price move over the latency budget.
+
+    Raises:
+        None.
+    """
     notes = [LATENCY_DRIFT_PLACEHOLDER] if drift_is_placeholder else []
     return round(latency_seconds * drift_per_second, 6), notes
 
 
-def build_cost_breakdown(*, raw_edge_per_contract: float, size: float,
-                         fees_total: float, slippage_total: float,
-                         spread_info_per_contract: float,
-                         latency_total: float) -> CostBreakdown:
+def build_cost_breakdown(
+    *,
+    raw_edge_per_contract: float,
+    size: float,
+    fees_total: float,
+    slippage_total: float,
+    spread_info_per_contract: float,
+    latency_total: float,
+) -> CostBreakdown:
     """Assemble the waterfall. All totals are for ``size`` contracts.
 
     net_edge is per contract: raw - fees/size - slippage/size - latency/size.
     spread is informational only (see module docstring).
+
+    Raises:
+        None.
     """
     per = size if size > 0 else 1.0
-    net = (raw_edge_per_contract
-           - fees_total / per
-           - slippage_total / per
-           - latency_total / per)
+    net = raw_edge_per_contract - fees_total / per - slippage_total / per - latency_total / per
     return CostBreakdown(
         raw_edge=round(raw_edge_per_contract, 6),
         trading_fees=round(fees_total / per, 6),

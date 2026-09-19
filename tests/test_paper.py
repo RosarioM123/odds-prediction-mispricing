@@ -1,4 +1,5 @@
 """Tests for the paper execution simulator."""
+
 from datetime import timedelta
 
 import pytest
@@ -28,8 +29,7 @@ def _setup(yes_ask=0.45, no_ask=0.45, depth=200.0, at=T0, expiration=None):
         for v in (yv, nv):
             v.market.expiration = expiration
     config = StrategyConfig.load()
-    opp = detect_bundle_arbitrage(yv, nv, config=config,
-                                  fee_model=FeeModel(), now=at)
+    opp = detect_bundle_arbitrage(yv, nv, config=config, fee_model=FeeModel(), now=at)
     assert opp is not None
     timelines = {
         (yv.market.venue.value, yv.market.market_id, "YES"): [yv.book],
@@ -77,8 +77,7 @@ def test_missed_when_book_empty(broker):
 
 
 def test_expired_when_market_expired(broker):
-    opp, timelines, markets = _setup(
-        depth=200.0, expiration=T0 + timedelta(milliseconds=100))
+    opp, timelines, markets = _setup(depth=200.0, expiration=T0 + timedelta(milliseconds=100))
     trades = broker.execute(opp, 50.0, timelines, markets, decide_at=T0)
     assert all(t.status == PaperTradeStatus.EXPIRED for t in trades)
 

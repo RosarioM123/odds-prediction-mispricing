@@ -4,23 +4,22 @@ All public market-data reads go through here: timeouts, retries with
 backoff, a descriptive user agent, and typed errors. No credentials are
 ever attached; every endpoint used by the adapters is public.
 """
+
 from __future__ import annotations
 
 import os
 import time
+from typing import Any
 
 import httpx
 
+from backend.errors import RateLimitError, VenueError
+
+# Re-exported so ``from backend.markets.http import VenueError`` keeps working.
+__all__ = ["VenueError", "RateLimitError", "get_json", "USER_AGENT", "DEFAULT_TIMEOUT"]
+
 USER_AGENT = "ODDS-research/0.1 (+https://github.com/RosarioM123/odds-prediction-mispricing)"
 DEFAULT_TIMEOUT = 15.0
-
-
-class VenueError(Exception):
-    """Base error for venue communication failures."""
-
-
-class RateLimitError(VenueError):
-    """The venue throttled us; back off before retrying."""
 
 
 def _client() -> httpx.Client:
@@ -28,13 +27,21 @@ def _client() -> httpx.Client:
     bracketed IPv6 entries in NO_PROXY (which stock httpx mis-parses)."""
     proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
     verify: str | bool = os.environ.get("SSL_CERT_FILE", True)
-    return httpx.Client(trust_env=False, proxy=proxy, verify=verify,
-                        headers={"User-Agent": USER_AGENT,
-                                 "Accept": "application/json"})
+    return httpx.Client(
+        trust_env=False,
+        proxy=proxy,
+        verify=verify,
+        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+    )
 
 
-def get_json(url: str, params: dict | None = None, *,
-             timeout: float = DEFAULT_TIMEOUT, retries: int = 2) -> dict | list:
+def get_json(
+    url: str,
+    params: dict[str, Any] | None = None,
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+    retries: int = 2,
+) -> dict[str, Any] | list[Any]:
     """GET a JSON document, retrying transient failures.
 
     Raises:
@@ -55,7 +62,10 @@ def get_json(url: str, params: dict | None = None, *,
             if resp.status_code >= 400:
                 raise VenueError(f"HTTP {resp.status_code} from {url}: {resp.text[:200]}")
             try:
-                return resp.json()
+                # resp.json() is untyped (Any); bind to the declared return
+                # type so no implicit Any leaks to callers.
+                payload: dict[str, Any] | list[Any] = resp.json()
+                return payload
             except ValueError as exc:
                 raise VenueError(f"non-JSON response from {url}") from exc
     raise VenueError(f"request to {url} failed after {retries + 1} attempts: {last_exc}")

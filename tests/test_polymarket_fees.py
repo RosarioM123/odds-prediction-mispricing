@@ -9,6 +9,7 @@ Verified 2026-09-18 against official Polymarket documentation:
   * https://docs.polymarket.com/trading/fees
     (fee tables: e.g. crypto rate 0.07, 100 shares @ $0.50 -> $1.75)
 """
+
 import pytest
 
 import backend.markets.polymarket as pm
@@ -31,7 +32,7 @@ GAMMA_MARKET_BPS = {
     "endDate": "2027-01-01T04:59:00Z",
     "outcomes": '["Yes", "No"]',
     "clobTokenIds": '["32338220190071351435772801779725302244575775216413325951443816017994629993401",'
-                    ' "25659310674993675562345759665114759892400026242514633218387667107987341231962"]',
+    ' "25659310674993675562345759665114759892400026242514633218387667107987341231962"]',
     "active": True,
     "closed": False,
     "orderPriceMinTickSize": 0.001,
@@ -154,24 +155,28 @@ def test_fee_larger_than_edge_rejects_trade():
     # taker fee on both legs (~$0.025/contract) turns it negative.
     config = StrategyConfig.load()
     fees = FeeModel()
-    yv, nv = polymarket_pair(yes_ask=0.495, no_ask=0.495, depth=100.0,
-                             taker_fee_rate=0.05)
+    yv, nv = polymarket_pair(yes_ask=0.495, no_ask=0.495, depth=100.0, taker_fee_rate=0.05)
     assert yv.label == "simulated" and nv.label == "simulated"  # ALL_INPUT_SIMULATED
 
     fee_y = fees.taker_fee(yv.market, 100.0, 0.495)
     fee_n = fees.taker_fee(nv.market, 100.0, 0.495)
     fees_total = fee_y.fee_dollars + fee_n.fee_dollars
-    lat, _ = latency_adjustment(config.total_latency_seconds,
-                                config.latency.adverse_drift_per_second,
-                                config.latency.drift_is_placeholder)
-    cb = build_cost_breakdown(raw_edge_per_contract=0.01, size=100.0,
-                              fees_total=fees_total, slippage_total=0.0,
-                              spread_info_per_contract=0.0,
-                              latency_total=lat * 100.0)
+    lat, _ = latency_adjustment(
+        config.total_latency_seconds,
+        config.latency.adverse_drift_per_second,
+        config.latency.drift_is_placeholder,
+    )
+    cb = build_cost_breakdown(
+        raw_edge_per_contract=0.01,
+        size=100.0,
+        fees_total=fees_total,
+        slippage_total=0.0,
+        spread_info_per_contract=0.0,
+        latency_total=lat * 100.0,
+    )
     assert cb.net_edge < config.detection.min_net_edge
     # The engine must reject the trade, not paper-execute a loser.
-    assert detect_bundle_arbitrage(yv, nv, config=config, fee_model=fees,
-                                   now=T0) is None
+    assert detect_bundle_arbitrage(yv, nv, config=config, fee_model=fees, now=T0) is None
 
 
 def test_verified_label_replaces_provisional():

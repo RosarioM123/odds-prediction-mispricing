@@ -1,4 +1,5 @@
 """Tests for arbitrage detection: bundle, cross-venue, matcher, detect_all."""
+
 from datetime import timedelta
 
 import pytest
@@ -37,6 +38,7 @@ def fees():
 
 # -- bundle arbitrage ----------------------------------------------------
 
+
 def test_bundle_detected_with_edge(config, fees):
     yv, nv = polymarket_pair(yes_ask=0.45, no_ask=0.45, depth=100.0)
     opp = detect_bundle_arbitrage(yv, nv, config=config, fee_model=fees, now=T0)
@@ -46,7 +48,10 @@ def test_bundle_detected_with_edge(config, fees):
     assert opp.costs.net_edge > config.detection.min_net_edge
     assert len(opp.legs) == 2
     assert "summary" in opp.explanation
-    assert "Polymarket" in opp.explanation["summary"] or "polymarket" in opp.explanation["summary"].lower()
+    assert (
+        "Polymarket" in opp.explanation["summary"]
+        or "polymarket" in opp.explanation["summary"].lower()
+    )
 
 
 def test_bundle_no_edge_returns_none(config, fees):
@@ -88,6 +93,7 @@ def test_bundle_labels_propagate(config, fees):
 
 # -- deterministic matcher -------------------------------------------------
 
+
 def test_match_exact_question():
     a = make_market(venue=Venue.POLYMARKET, question="Will it rain tomorrow?")
     b = make_market(venue=Venue.KALSHI, question="Will it rain tomorrow?!!")
@@ -114,15 +120,28 @@ def test_normalize_question():
 
 # -- cross-venue ------------------------------------------------------------
 
+
 def test_cross_venue_direct_detected(config, fees):
-    buy_m = make_market(venue=Venue.POLYMARKET, outcome=Outcome.YES,
-                        market_id="pm-a", question="Will it rain tomorrow?")
-    sell_m = make_market(venue=Venue.POLYMARKET, outcome=Outcome.YES,
-                         market_id="pm-b", question="Will it rain tomorrow?")
+    buy_m = make_market(
+        venue=Venue.POLYMARKET,
+        outcome=Outcome.YES,
+        market_id="pm-a",
+        question="Will it rain tomorrow?",
+    )
+    sell_m = make_market(
+        venue=Venue.POLYMARKET,
+        outcome=Outcome.YES,
+        market_id="pm-b",
+        question="Will it rain tomorrow?",
+    )
     # second venue for the sell side
-    sell_m = make_market(venue=Venue.KALSHI, outcome=Outcome.YES,
-                         market_id="kx-a", question="Will it rain tomorrow?",
-                         taker_fee_rate=None)
+    sell_m = make_market(
+        venue=Venue.KALSHI,
+        outcome=Outcome.YES,
+        market_id="kx-a",
+        question="Will it rain tomorrow?",
+        taker_fee_rate=None,
+    )
     buy_book = make_book(buy_m, bids=[(0.48, 100.0)], asks=[(0.50, 100.0)], at=T0)
     sell_book = make_book(sell_m, bids=[(0.60, 100.0)], asks=[(0.62, 100.0)], at=T0)
     bv, sv = BookView(buy_m, buy_book, "simulated"), BookView(sell_m, sell_book, "simulated")
@@ -130,17 +149,25 @@ def test_cross_venue_direct_detected(config, fees):
     assert opp is not None
     assert opp.strategy == "cross_venue_arbitrage"
     assert opp.match_confidence >= config.cross_venue.min_match_confidence
-    legs = {l["side"] for l in opp.legs}
+    legs = {leg["side"] for leg in opp.legs}
     assert legs == {"buy", "sell"}
 
 
 def test_cross_venue_direct_no_bids_not_invented(config, fees):
     # Kalshi-style sell book: asks only. Detector must skip, not invent a bid.
-    buy_m = make_market(venue=Venue.POLYMARKET, outcome=Outcome.YES,
-                        market_id="pm-a", question="Will it rain tomorrow?")
-    sell_m = make_market(venue=Venue.KALSHI, outcome=Outcome.YES,
-                         market_id="kx-a", question="Will it rain tomorrow?",
-                         taker_fee_rate=None)
+    buy_m = make_market(
+        venue=Venue.POLYMARKET,
+        outcome=Outcome.YES,
+        market_id="pm-a",
+        question="Will it rain tomorrow?",
+    )
+    sell_m = make_market(
+        venue=Venue.KALSHI,
+        outcome=Outcome.YES,
+        market_id="kx-a",
+        question="Will it rain tomorrow?",
+        taker_fee_rate=None,
+    )
     buy_book = make_book(buy_m, asks=[(0.50, 100.0)], at=T0)
     sell_book = make_book(sell_m, asks=[(0.62, 100.0)], at=T0)  # no bids
     bv = BookView(buy_m, buy_book, "simulated")
@@ -160,6 +187,7 @@ def test_cross_venue_complement_works_without_bids(config, fees):
 
 # -- detect_all ---------------------------------------------------------------
 
+
 def test_detect_all_dedupes_to_newest(config, fees):
     yv, nv = polymarket_pair(yes_ask=0.45, no_ask=0.45, depth=100.0)
     # Duplicate YES book, older timestamp: must be ignored.
@@ -172,12 +200,16 @@ def test_detect_all_dedupes_to_newest(config, fees):
 
 def test_detect_all_conflicting_metadata_skipped(config, fees):
     yv, nv = polymarket_pair(yes_ask=0.45, no_ask=0.45)
-    bad = make_market(venue=Venue.POLYMARKET, outcome=Outcome.NO,
-                      market_id="pm-no-2", event_id="evt-1",
-                      question="Something completely different")
+    bad = make_market(
+        venue=Venue.POLYMARKET,
+        outcome=Outcome.NO,
+        market_id="pm-no-2",
+        event_id="evt-1",
+        question="Something completely different",
+    )
     bad_book = make_book(bad, asks=[(0.45, 100.0)], at=T0)
     opps, flags = detect_all(
-        [yv, nv, BookView(bad, bad_book, "simulated")],
-        config=config, fee_model=fees, now=T0)
+        [yv, nv, BookView(bad, bad_book, "simulated")], config=config, fee_model=fees, now=T0
+    )
     assert opps == []
     assert any(CONFLICTING_METADATA in f for f in flags)

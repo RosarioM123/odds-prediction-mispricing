@@ -13,17 +13,24 @@ and then applies the configured Kelly fraction (0.25 | 0.50 | 1.00).
 Quantity is then capped by available liquidity and max_position_per_market.
 A non-positive Kelly fraction sizes to zero: the opportunity is not taken.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+from backend.errors import DataValidationError
 
 KELLY_FRACTIONS = (0.25, 0.50, 1.00)
 
 
 def kelly_optimal_fraction(p_win: float, odds_b: float) -> float:
-    """Full-Kelly fraction of bankroll. Floored at 0 (never bet)."""
+    """Full-Kelly fraction of bankroll. Floored at 0 (never bet).
+
+    Raises:
+        DataValidationError: if ``p_win`` is not in the open interval (0, 1).
+    """
     if not 0.0 < p_win < 1.0:
-        raise ValueError("p_win must be in (0, 1)")
+        raise DataValidationError("p_win must be in (0, 1)")
     if odds_b <= 0:
         return 0.0
     q = 1.0 - p_win
@@ -40,14 +47,27 @@ class SizingResult:
     notes: list[str] = field(default_factory=list)
 
 
-def size_position(*, net_edge_per_contract: float, cost_per_contract: float,
-                  liquidity: float, bankroll: float, fraction: float,
-                  max_position: float, p_win: float,
-                  p_win_is_placeholder: bool = True) -> SizingResult:
-    """Size one opportunity. Returns quantity 0 when Kelly says don't bet."""
+def size_position(
+    *,
+    net_edge_per_contract: float,
+    cost_per_contract: float,
+    liquidity: float,
+    bankroll: float,
+    fraction: float,
+    max_position: float,
+    p_win: float,
+    p_win_is_placeholder: bool = True,
+) -> SizingResult:
+    """Size one opportunity. Returns quantity 0 when Kelly says don't bet.
+
+    Raises:
+        DataValidationError: if ``fraction`` is not a supported Kelly
+            fraction, or if ``p_win`` is not in (0, 1) when Kelly sizing
+            is reached.
+    """
     notes: list[str] = []
     if fraction not in KELLY_FRACTIONS:
-        raise ValueError(f"fraction must be one of {KELLY_FRACTIONS}")
+        raise DataValidationError(f"fraction must be one of {KELLY_FRACTIONS}")
     if p_win_is_placeholder:
         notes.append("P_WIN_PLACEHOLDER: assumed edge probability not calibrated")
     if bankroll <= 0 or cost_per_contract <= 0:

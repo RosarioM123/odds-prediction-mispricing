@@ -1,4 +1,5 @@
 """Tests for the Polymarket adapter. Fixtures mirror verified API shapes."""
+
 import pytest
 
 import backend.markets.polymarket as pm
@@ -12,7 +13,7 @@ GAMMA_MARKET = {
     "endDate": "2027-01-01T04:59:00Z",
     "outcomes": '["Yes", "No"]',
     "clobTokenIds": '["32338220190071351435772801779725302244575775216413325951443816017994629993401",'
-                    ' "25659310674993675562345759665114759892400026242514633218387667107987341231962"]',
+    ' "25659310674993675562345759665114759892400026242514633218387667107987341231962"]',
     "active": True,
     "closed": False,
     "orderPriceMinTickSize": 0.001,
@@ -51,8 +52,14 @@ def test_gamma_market_splits_into_yes_and_no():
     yes, no = markets
     assert yes.outcome == Outcome.YES
     assert no.outcome == Outcome.NO
-    assert yes.market_id == "32338220190071351435772801779725302244575775216413325951443816017994629993401"
-    assert no.market_id == "25659310674993675562345759665114759892400026242514633218387667107987341231962"
+    assert (
+        yes.market_id
+        == "32338220190071351435772801779725302244575775216413325951443816017994629993401"
+    )
+    assert (
+        no.market_id
+        == "25659310674993675562345759665114759892400026242514633218387667107987341231962"
+    )
     assert yes.venue == Venue.POLYMARKET
     assert yes.event_id == GAMMA_MARKET["conditionId"]
     assert yes.question == GAMMA_MARKET["question"]
@@ -70,8 +77,8 @@ def test_book_levels_reversed_to_best_first():
     adapter = make_adapter()
     market = adapter._markets_from_gamma(GAMMA_MARKET)[0]
     book = adapter.normalize_order_book(CLOB_BOOK, market)
-    assert [l.price for l in book.bids] == [0.042, 0.041, 0.040]
-    assert [l.price for l in book.asks] == [0.043, 0.044, 0.050]
+    assert [level.price for level in book.bids] == [0.042, 0.041, 0.040]
+    assert [level.price for level in book.asks] == [0.043, 0.044, 0.050]
     assert book.best_bid == pytest.approx(0.042)
     assert book.best_ask == pytest.approx(0.043)
     assert book.venue_timestamp is not None
