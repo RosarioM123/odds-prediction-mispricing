@@ -48,6 +48,12 @@ and https://docs.polymarket.com/api-spec/gamma-openapi.yaml
 - Most markets are fee-free; taker fees apply to specific categories and are
   redistributed to makers as rebates. Makers pay 0.
 - Minimum fee 0.0001 USDC; smaller amounts round to zero.
+    Verified 2026-09-18: the official CLOB OpenAPI spec
+    (https://docs.polymarket.com/api-spec/clob-openapi.yaml) defines
+    `FeeRate.base_fee` as "Base fee in basis points", so
+    `base_fee / 10000` is the decimal taker fee rate. It applies per token
+    at match time to taker fills only; makers pay 0
+    (https://docs.polymarket.com/trading/fees).
 - Documented category snapshot (mid-2026): Crypto 0.07, Sports/Economics/
   Culture/Weather/Other 0.05, Finance/Politics/Mentions/Tech 0.04,
   Geopolitics 0. The docs explicitly warn against hardcoding rates: resolve
@@ -121,10 +127,20 @@ All calls below were public, unauthenticated GETs.
 - `GET /fee-rate?token_id=` returned `{"base_fee": 1000}`.
 - `GET /tick-size?token_id=` returned `{"minimum_tick_size": 0.001}`.
 - `GET /price?token_id=&side=BUY` returned `{"price": "0.042"}`.
-- Caveat: `base_fee` values observed (0, 1000) are coarse relative to the
-  documented per-category formula rates. The adapter resolves and caches
-  the live value; Phase 7 must pin down exactly how it enters the cost
-  model. Do not treat `base_fee / 10000` as the final fee without that work.
+- Verified 2026-09-18: the official CLOB OpenAPI spec defines
+  `FeeRate.base_fee` as "Base fee in basis points"
+  (https://docs.polymarket.com/api-spec/clob-openapi.yaml), so
+  `base_fee / 10000` is the decimal taker fee rate (1000 -> 0.10). The rate
+  applies per token at match time to taker fills only; makers pay 0
+  (https://docs.polymarket.com/trading/fees). The `base_fee / 10000`
+  conversion is no longer provisional.
+- Caveat (resolved 2026-09-18): `base_fee` values observed (0, 1000) are
+  coarse relative to the documented per-category formula rates (e.g. a
+  1000 bps -> 0.10 rate was seen on a market whose category table lists
+  lower rates; the docs warn rates drift over time, so live resolution
+  wins). The adapter resolves and caches the live value. The
+  `base_fee / 10000` conversion itself is verified against the official
+  CLOB OpenAPI spec and is no longer provisional.
 
 ### Kalshi
 
@@ -146,15 +162,22 @@ All calls below were public, unauthenticated GETs.
 - Demo markets carried **no liquidity** (50 sampled, zero with quotes),
   so a non-empty Kalshi book could not be captured live. Adapter behavior
   on real ladders is covered by fixture tests only, labeled as such.
-- **Documented limitation:** the public orderbook envelope does not
-  separate bids from asks, so Kalshi books normalize with asks populated
-  and bids empty. Spread and mid-price are unavailable for Kalshi until
-  bid semantics are verified. Bundle arbitrage (YES ask + NO ask) is
-  unaffected.
+- **RESOLVED 2026-09-18 (was "documented limitation"):** the public
+  orderbook envelope does NOT hide bids -- per the official OpenAPI spec
+  (https://docs.kalshi.com/openapi.yaml, `GET /markets/{ticker}/orderbook`),
+  "The order book shows all active bid orders for both yes and no sides of
+  a binary market. It returns yes bids and no bids only (no asks are
+  returned)." The adapter previously mislabeled the ladders as asks and
+  left bids empty; it now normalizes each ladder to BIDS and derives asks
+  from the documented equivalence: "a bid for yes at price X is equivalent
+  to an ask for no at price (100-X) ... with identical contract sizes"
+  (a yes order and a no order whose prices sum to $1 form a trade). Spread
+  and mid-price are therefore available for Kalshi books with liquidity.
 
 ### Remaining open items
 
 - Confirm Polymarket `/fee-rate` behavior for a fee-free token.
 - Measure real round-trip latency to both venues for the latency budget.
 - Capture a non-empty Kalshi order book from production or a liquid demo
-  market to confirm ladder semantics.
+  market to sanity-check ladder parsing against live data (ladder
+  *semantics* are already confirmed via the official OpenAPI spec).
