@@ -35,7 +35,7 @@ class OrderBookLevel(BaseModel):
     """One price level. Price in dollars per contract/share, size in contracts."""
 
     price: float = Field(ge=0.0, le=1.0)
-    size: float = Field(ge=0.0)
+    size: float = Field(ge=0.0, allow_inf_nan=False)
 
 
 class OrderBook(BaseModel):
