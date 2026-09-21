@@ -1,3 +1,5 @@
+> **Status: paused.** Active work is on [world-workstate-infrastructure](https://github.com/RosarioM123/world-workstate-infrastructure). This repo resumes after the WORLD handoff experiment is validated.
+
 # ODDS
 
 ![CI](https://github.com/RosarioM123/odds-prediction-mispricing/actions/workflows/ci.yml/badge.svg)
