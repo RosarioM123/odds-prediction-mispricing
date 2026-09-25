@@ -248,7 +248,7 @@ def test_bench_size_position(benchmark, config):
         fraction=config.kelly.fraction,
         max_position=config.risk.max_position_per_market,
         p_win=config.kelly.arbitrage_p_win,
-        p_win_is_placeholder=False,
+        p_win_status="assumption",
     )
 
     result = benchmark(
@@ -260,7 +260,7 @@ def test_bench_size_position(benchmark, config):
         fraction=config.kelly.fraction,
         max_position=config.risk.max_position_per_market,
         p_win=config.kelly.arbitrage_p_win,
-        p_win_is_placeholder=False,
+        p_win_status="assumption",
     )
     assert result.quantity == expected.quantity
     assert result.stake_dollars == expected.stake_dollars

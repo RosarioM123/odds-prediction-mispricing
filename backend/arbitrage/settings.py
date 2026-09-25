@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from backend.arbitrage.calibration import load_calibration
 from backend.config import load_yaml
 from backend.errors import DataValidationError
 
@@ -33,6 +34,12 @@ class KellySettings:
     assumed_edge_probability: float = 0.55
     probability_is_placeholder: bool = True
     arbitrage_p_win: float = 0.99
+    # Provenance of arbitrage_p_win: "assumption" (default), "preliminary",
+    # or "calibrated" once scripts/fit_calibration.py has fitted it from
+    # paper-execution outcomes on live snapshots.
+    p_win_status: str = "assumption"
+    p_win_n: int = 0
+    p_win_period: str = ""
 
 
 @dataclass(frozen=True)
@@ -51,6 +58,10 @@ class LatencySettings:
     execution_ms: float = 500.0
     adverse_drift_per_second: float = 0.002
     drift_is_placeholder: bool = True
+    # Provenance of adverse_drift_per_second: "placeholder" (default),
+    # "preliminary", or "calibrated" once scripts/fit_calibration.py has
+    # fitted it from live quote movement.
+    drift_status: str = "placeholder"
 
 
 @dataclass(frozen=True)
@@ -76,6 +87,11 @@ class StrategyConfig:
         risk = d.get("risk", {})
         lat = d.get("latency", {})
 
+        # Optional empirical calibration (configs/calibration.yaml, written
+        # by scripts/fit_calibration.py). Absent or empty means every model
+        # stays on its documented placeholder/assumption.
+        calibration = load_calibration()
+
         def _num(value: Any, field_name: str) -> float:
             try:
                 return float(value)
@@ -83,6 +99,25 @@ class StrategyConfig:
                 raise DataValidationError(
                     f"strategy.yaml: {field_name} must be numeric, got {value!r}"
                 ) from exc
+
+        kelly_p_win = _num(kel.get("arbitrage_p_win", 0.99), "kelly.arbitrage_p_win")
+        p_win_status, p_win_n, p_win_period = "assumption", 0, ""
+        if calibration is not None and calibration.kelly is not None:
+            kc = calibration.kelly
+            kelly_p_win = kc.arbitrage_p_win
+            p_win_status = "preliminary" if kc.preliminary else "calibrated"
+            p_win_n, p_win_period = kc.n_executions, f"{kc.start} to {kc.end}"
+
+        drift_rate = _num(
+            lat.get("adverse_drift_per_second", 0.002), "latency.adverse_drift_per_second"
+        )
+        drift_is_placeholder = bool(lat.get("drift_is_placeholder", True))
+        drift_status = "placeholder"
+        if calibration is not None and calibration.latency_drift is not None:
+            ld = calibration.latency_drift
+            drift_rate = ld.drift_per_second
+            drift_is_placeholder = False
+            drift_status = "preliminary" if ld.preliminary else "calibrated"
 
         return cls(
             detection=DetectionSettings(
@@ -105,7 +140,10 @@ class StrategyConfig:
                 assumed_edge_probability=_num(
                     kel.get("assumed_edge_probability", 0.55), "kelly.assumed_edge_probability"
                 ),
-                arbitrage_p_win=_num(kel.get("arbitrage_p_win", 0.99), "kelly.arbitrage_p_win"),
+                arbitrage_p_win=kelly_p_win,
+                p_win_status=p_win_status,
+                p_win_n=p_win_n,
+                p_win_period=p_win_period,
             ),
             risk=RiskSettings(
                 max_position_per_market=_num(
@@ -134,10 +172,9 @@ class StrategyConfig:
                     lat.get("assumed_execution_latency_ms", 500),
                     "latency.assumed_execution_latency_ms",
                 ),
-                adverse_drift_per_second=_num(
-                    lat.get("adverse_drift_per_second", 0.002), "latency.adverse_drift_per_second"
-                ),
-                drift_is_placeholder=bool(lat.get("drift_is_placeholder", True)),
+                adverse_drift_per_second=drift_rate,
+                drift_is_placeholder=drift_is_placeholder,
+                drift_status=drift_status,
             ),
         )
 

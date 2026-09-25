@@ -18,3 +18,5 @@ ADRs are marked as such, never deleted.
 | [0009](0009-no-invented-sell-prices.md) | Direct cross-venue legs require real sell-side bids; the engine never invents a sell price. |
 | [0010](0010-sample-size-honesty-floor.md) | No Sharpe/win-rate significance claims below 30 executed opportunities (`SAMPLE_TOO_SMALL`). |
 | [0011](0011-placeholder-labeling.md) | Uncalibrated assumptions (fee fallback, latency drift, Kelly p_win) are labeled at point of use, never silent. |
+| [0012](0012-latency-drift-preliminary-fit.md) | Latency drift fitted from live books (preliminary, n=29, 2026-09-25); placeholder label retired for drift. |
+| [0013](0013-kelly-pwin-uncalibrated.md) | Kelly p_win stays an assumption: zero live executions to fit on; fitting path built and tested. |

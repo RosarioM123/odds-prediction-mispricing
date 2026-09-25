@@ -164,7 +164,7 @@ def test_fee_larger_than_edge_rejects_trade():
     lat, _ = latency_adjustment(
         config.total_latency_seconds,
         config.latency.adverse_drift_per_second,
-        config.latency.drift_is_placeholder,
+        drift_status=config.latency.drift_status,
     )
     cb = build_cost_breakdown(
         raw_edge_per_contract=0.01,

@@ -324,7 +324,7 @@ def test_size_position_zero_net_edge_kelly_zero():
         fraction=0.5,
         max_position=500.0,
         p_win=0.99,
-        p_win_is_placeholder=False,
+        p_win_status="assumption",
     )
     assert r.quantity == 0.0
     assert r.capped_by == "kelly_zero"
@@ -339,7 +339,7 @@ def test_size_position_enormous_edge_capped_by_liquidity():
         fraction=1.0,
         max_position=500.0,
         p_win=0.99,
-        p_win_is_placeholder=False,
+        p_win_status="assumption",
     )
     assert r.quantity == pytest.approx(100.0)
     assert r.capped_by == "liquidity"
@@ -354,7 +354,7 @@ def test_size_position_enormous_edge_capped_by_both():
         fraction=1.0,
         max_position=500.0,
         p_win=0.99,
-        p_win_is_placeholder=False,
+        p_win_status="assumption",
     )
     assert r.quantity == pytest.approx(500.0)
     assert r.capped_by == "liquidity+max_position"
@@ -369,7 +369,7 @@ def test_size_position_zero_bankroll_sizes_zero():
         fraction=0.5,
         max_position=500.0,
         p_win=0.99,
-        p_win_is_placeholder=False,
+        p_win_status="assumption",
     )
     assert r.quantity == 0.0
     assert r.capped_by == "no_bankroll_or_cost"
@@ -384,7 +384,7 @@ def test_size_position_zero_cost_sizes_zero():
         fraction=0.5,
         max_position=500.0,
         p_win=0.99,
-        p_win_is_placeholder=False,
+        p_win_status="assumption",
     )
     assert r.quantity == 0.0
     assert r.capped_by == "no_bankroll_or_cost"

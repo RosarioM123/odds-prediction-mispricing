@@ -4,6 +4,7 @@ import pytest
 
 from backend.arbitrage.costs import (
     FEE_RATE_FALLBACK,
+    LATENCY_DRIFT_PLACEHOLDER,
     POLYMARKET_FEE_PROVISIONAL,
     SPREAD_UNAVAILABLE,
     FeeModel,
@@ -12,6 +13,7 @@ from backend.arbitrage.costs import (
     latency_adjustment,
     walk_book,
 )
+from backend.errors import DataValidationError
 from tests.fixtures import kalshi_yes_no, make_book, make_market, polymarket_pair
 
 
@@ -95,9 +97,23 @@ def test_half_spread_with_bids():
 
 
 def test_latency_adjustment_placeholder_flagged():
-    adj, notes = latency_adjustment(0.8, 0.002, True)
+    adj, notes = latency_adjustment(0.8, 0.002, drift_status="placeholder")
     assert adj == pytest.approx(0.0016)
-    assert notes  # placeholder label present
+    assert notes == [LATENCY_DRIFT_PLACEHOLDER]
+
+
+def test_latency_adjustment_status_labels():
+    from backend.arbitrage.costs import (
+        LATENCY_DRIFT_CALIBRATED,
+        LATENCY_DRIFT_PRELIMINARY,
+    )
+
+    _, notes = latency_adjustment(0.8, 0.002, drift_status="preliminary")
+    assert notes == [LATENCY_DRIFT_PRELIMINARY]
+    _, notes = latency_adjustment(0.8, 0.002, drift_status="calibrated")
+    assert notes == [LATENCY_DRIFT_CALIBRATED]
+    with pytest.raises(DataValidationError):
+        latency_adjustment(0.8, 0.002, drift_status="bogus")
 
 
 def test_cost_breakdown_waterfall_math():

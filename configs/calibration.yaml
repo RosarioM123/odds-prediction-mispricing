@@ -1,0 +1,16 @@
+# Empirical calibrations fitted from live venue observations.
+# Written by scripts/fit_calibration.py. All fits here are labeled
+# preliminary: small in-session samples, not production calibrations.
+latency_drift:
+  drift_per_second: 2.883269574310241e-07
+  median_per_second: 0.0
+  n_observations: 29
+  n_markets: 15
+  venues:
+  - polymarket
+  start: '2026-09-25'
+  end: '2026-09-25'
+  preliminary: true
+  method: mean |mid move| per second between consecutive collection rounds over live
+    order books; proxy for expected adverse move over the latency budget. Zero moves
+    dominate short-horizon samples; the fit is preliminary until a longer window exists.

@@ -40,6 +40,8 @@ POLYMARKET_FEE_VERIFIED = "POLYMARKET_FEE_VERIFIED"
 # use POLYMARKET_FEE_VERIFIED.
 POLYMARKET_FEE_PROVISIONAL = POLYMARKET_FEE_VERIFIED
 LATENCY_DRIFT_PLACEHOLDER = "LATENCY_DRIFT_PLACEHOLDER"
+LATENCY_DRIFT_PRELIMINARY = "LATENCY_DRIFT_PRELIMINARY"
+LATENCY_DRIFT_CALIBRATED = "LATENCY_DRIFT_CALIBRATED"
 SPREAD_UNAVAILABLE = "SPREAD_UNAVAILABLE_NO_BIDS"
 
 _FALLBACK_TAKER_RATE = 0.05
@@ -200,15 +202,29 @@ def half_spread_cost(book: OrderBook) -> tuple[float | None, list[str]]:
 
 
 def latency_adjustment(
-    latency_seconds: float, drift_per_second: float, drift_is_placeholder: bool
+    latency_seconds: float,
+    drift_per_second: float,
+    *,
+    drift_status: str = "placeholder",
 ) -> tuple[float, list[str]]:
     """Expected adverse price move over the latency budget.
 
+    ``drift_status`` is one of "placeholder", "preliminary", or
+    "calibrated" (see backend/arbitrage/calibration.py); the matching
+    label propagates into every explanation so a reader can see exactly
+    how much to trust the drift rate.
+
     Raises:
-        None.
+        DataValidationError: if ``drift_status`` is not a known status.
     """
-    notes = [LATENCY_DRIFT_PLACEHOLDER] if drift_is_placeholder else []
-    return round(latency_seconds * drift_per_second, 6), notes
+    labels = {
+        "placeholder": LATENCY_DRIFT_PLACEHOLDER,
+        "preliminary": LATENCY_DRIFT_PRELIMINARY,
+        "calibrated": LATENCY_DRIFT_CALIBRATED,
+    }
+    if drift_status not in labels:
+        raise DataValidationError(f"unknown drift_status {drift_status!r}")
+    return round(latency_seconds * drift_per_second, 6), [labels[drift_status]]
 
 
 def build_cost_breakdown(

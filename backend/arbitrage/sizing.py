@@ -22,6 +22,11 @@ from backend.errors import DataValidationError
 
 KELLY_FRACTIONS = (0.25, 0.50, 1.00)
 
+P_WIN_PLACEHOLDER_NOTE = "P_WIN_PLACEHOLDER: assumed edge probability not calibrated"
+P_WIN_ASSUMPTION_NOTE = (
+    "P_WIN_ASSUMPTION: locked-arbitrage execution-risk assumption, not a calibrated model"
+)
+
 
 def kelly_optimal_fraction(p_win: float, odds_b: float) -> float:
     """Full-Kelly fraction of bankroll. Floored at 0 (never bet).
@@ -56,20 +61,37 @@ def size_position(
     fraction: float,
     max_position: float,
     p_win: float,
-    p_win_is_placeholder: bool = True,
+    p_win_status: str = "placeholder",
+    p_win_n: int = 0,
+    p_win_period: str = "",
 ) -> SizingResult:
     """Size one opportunity. Returns quantity 0 when Kelly says don't bet.
 
+    ``p_win_status`` is one of "placeholder", "assumption" (locked
+    arbitrage execution-risk assumption), "preliminary", or "calibrated"
+    (see backend/arbitrage/calibration.py); the matching note propagates
+    into the result.
+
     Raises:
         DataValidationError: if ``fraction`` is not a supported Kelly
-            fraction, or if ``p_win`` is not in (0, 1) when Kelly sizing
-            is reached.
+            fraction, if ``p_win`` is not in (0, 1) when Kelly sizing
+            is reached, or if ``p_win_status`` is not a known status.
     """
     notes: list[str] = []
     if fraction not in KELLY_FRACTIONS:
         raise DataValidationError(f"fraction must be one of {KELLY_FRACTIONS}")
-    if p_win_is_placeholder:
-        notes.append("P_WIN_PLACEHOLDER: assumed edge probability not calibrated")
+    if p_win_status == "placeholder":
+        notes.append(P_WIN_PLACEHOLDER_NOTE)
+    elif p_win_status == "assumption":
+        notes.append(P_WIN_ASSUMPTION_NOTE)
+    elif p_win_status in ("preliminary", "calibrated"):
+        tag = "P_WIN_PRELIMINARY" if p_win_status == "preliminary" else "P_WIN_CALIBRATED"
+        notes.append(
+            f"{tag}: p_win fitted from {p_win_n} paper executions on live "
+            f"snapshots ({p_win_period})"
+        )
+    else:
+        raise DataValidationError(f"unknown p_win_status {p_win_status!r}")
     if bankroll <= 0 or cost_per_contract <= 0:
         return SizingResult(0.0, 0.0, 0.0, fraction, "no_bankroll_or_cost", notes)
 
