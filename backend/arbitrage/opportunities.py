@@ -16,11 +16,14 @@ Strategies
    b. Complement: buy YES on venue A and NO on venue B when
       ask_YES_A + ask_NO_B < 1. Works without any bids.
 
-Matching is deterministic: normalized questions must be exactly equal
-(plus an expiry-proximity bonus). A future NLP matcher may *propose*
-candidates with confidence scores, but it can never authorize a trade;
-only pairs passing the deterministic gate (>= min_match_confidence)
-reach the risk engine.
+Matching is scored, then gated (see backend/arbitrage/matching.py):
+``match_markets`` scores every cross-venue pair by title token
+similarity plus an expiry-proximity bonus, and a curator override list
+(``configs/match_overrides.yaml``) can pin known pairs. The matcher only
+*proposes* candidates with confidence scores; it can never authorize a
+trade. Only pairs scoring at or above ``min_match_confidence`` reach the
+risk engine. Identical normalized questions still score 0.9 before the
+bonus, preserving the old deterministic behavior on exact matches.
 
 Every opportunity carries a human-readable explanation: venues, prices,
 size, the full cost waterfall, and net edge, plus any data-quality flags
@@ -30,8 +33,7 @@ inputs stay labeled simulated all the way through.
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
 
@@ -41,6 +43,12 @@ from backend.arbitrage.costs import (
     half_spread_cost,
     latency_adjustment,
     walk_book,
+)
+from backend.arbitrage.matching import (
+    MatchResult,
+    default_overrides,
+    match_markets,
+    normalize_question,
 )
 from backend.arbitrage.settings import StrategyConfig
 from backend.schemas import (
@@ -145,45 +153,18 @@ def dedupe_views(views: list[BookView]) -> list[BookView]:
     return list(best.values())
 
 
-def normalize_question(question: str) -> str:
-    """Lowercase, strip punctuation, collapse whitespace.
-
-    Raises:
-        None.
-    """
-    text = question.lower()
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-@dataclass
-class MatchResult:
-    matched: bool
-    confidence: float
-    reasons: list[str] = field(default_factory=list)
-
-
 def deterministic_match(a: Market, b: Market) -> MatchResult:
-    """Score whether two markets are the same event, deterministically.
+    """Backwards-compatible alias for :func:`match_markets`.
+
+    The old exact-equality matcher now scores titles fuzzily; pairs that
+    used to match (identical normalized questions) still score 0.9 before
+    the expiry bonus, so behavior on those pairs is unchanged. The
+    ``min_match_confidence`` gate in the detectors still authorizes.
 
     Raises:
         None.
     """
-    if a.venue == b.venue:
-        return MatchResult(False, 0.0, [SAME_VENUE])
-    qa, qb = normalize_question(a.question), normalize_question(b.question)
-    if not qa or not qb or qa != qb:
-        return MatchResult(False, 0.0, ["questions differ after normalization"])
-    confidence = 0.9
-    reasons = ["normalized questions exactly equal"]
-    if a.expiration and b.expiration:
-        delta = abs((a.expiration - b.expiration).total_seconds())
-        if delta <= 24 * 3600:
-            confidence = min(1.0, confidence + 0.1)
-            reasons.append("expirations within 24h")
-        else:
-            reasons.append("expirations differ by >24h; no bonus")
-    return MatchResult(True, round(confidence, 3), reasons)
+    return match_markets(a, b)
 
 
 def _explain(summary: str, fields: dict[str, Any]) -> dict[str, Any]:
@@ -308,7 +289,7 @@ def detect_bundle_arbitrage(
     lat_total, lat_notes = latency_adjustment(
         config.total_latency_seconds,
         config.latency.adverse_drift_per_second,
-        config.latency.drift_is_placeholder,
+        drift_status=config.latency.drift_status,
     )
     latency_total = lat_total * size
     flags.extend(lat_notes)
@@ -391,6 +372,7 @@ def detect_cross_venue_direct(
     size_cap: float | None = None,
     seed: int | None = DEFAULT_SEED,
     id_factory: _IdFactory | None = None,
+    overrides: dict[str, bool] | None = None,
 ) -> Opportunity | None:
     """Same outcome, buy on venue A ask, sell on venue B bid.
 
@@ -407,7 +389,7 @@ def detect_cross_venue_direct(
     factory = id_factory if id_factory is not None else _IdFactory(seed)
     cv = config.cross_venue
     det = config.detection
-    match = deterministic_match(buy_view.market, sell_view.market)
+    match = match_markets(buy_view.market, sell_view.market, overrides=overrides)
     if not match.matched or match.confidence < cv.min_match_confidence:
         return None
     flags: list[str] = [f"LABEL_{buy_view.label.upper()}"]
@@ -442,7 +424,7 @@ def detect_cross_venue_direct(
     lat_total, lat_notes = latency_adjustment(
         config.total_latency_seconds,
         config.latency.adverse_drift_per_second,
-        config.latency.drift_is_placeholder,
+        drift_status=config.latency.drift_status,
     )
     flags.extend(lat_notes)
     spread_b, _ = half_spread_cost(buy_view.book)
@@ -520,6 +502,7 @@ def detect_cross_venue_complement(
     size_cap: float | None = None,
     seed: int | None = DEFAULT_SEED,
     id_factory: _IdFactory | None = None,
+    overrides: dict[str, bool] | None = None,
 ) -> Opportunity | None:
     """Buy YES on venue A and NO on venue B for the same event.
 
@@ -536,7 +519,7 @@ def detect_cross_venue_complement(
     factory = id_factory if id_factory is not None else _IdFactory(seed)
     cv = config.cross_venue
     det = config.detection
-    match = deterministic_match(yes_view.market, no_view.market)
+    match = match_markets(yes_view.market, no_view.market, overrides=overrides)
     if not match.matched or match.confidence < cv.min_match_confidence:
         return None
     flags: list[str] = [f"LABEL_{yes_view.label.upper()}"]
@@ -569,7 +552,7 @@ def detect_cross_venue_complement(
     lat_total, lat_notes = latency_adjustment(
         config.total_latency_seconds,
         config.latency.adverse_drift_per_second,
-        config.latency.drift_is_placeholder,
+        drift_status=config.latency.drift_status,
     )
     flags.extend(lat_notes)
     spread_info = 0.0
@@ -647,6 +630,7 @@ def detect_all(
     now: datetime | None = None,
     size_cap: float | None = None,
     seed: int | None = DEFAULT_SEED,
+    overrides: dict[str, bool] | None = None,
 ) -> tuple[list[Opportunity], list[str]]:
     """Run every detector over a set of views.
 
@@ -666,6 +650,7 @@ def detect_all(
     now = now or utcnow()
     views = dedupe_views(views)
     id_factory = _IdFactory(seed)
+    ov = overrides if overrides is not None else default_overrides()
     global_flags: list[str] = []
 
     # Group by event; conflicting questions within an event -> skip group.
@@ -714,6 +699,7 @@ def detect_all(
                     now=now,
                     size_cap=size_cap,
                     id_factory=id_factory,
+                    overrides=ov,
                 )
                 if opp:
                     opportunities.append(opp)
@@ -726,6 +712,7 @@ def detect_all(
                     now=now,
                     size_cap=size_cap,
                     id_factory=id_factory,
+                    overrides=ov,
                 )
                 if opp:
                     opportunities.append(opp)
@@ -739,6 +726,7 @@ def detect_all(
                     now=now,
                     size_cap=size_cap,
                     id_factory=id_factory,
+                    overrides=ov,
                 )
                 if opp:
                     opportunities.append(opp)

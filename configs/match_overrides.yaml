@@ -1,0 +1,10 @@
+# Manual cross-venue match overrides, curated by a human.
+#
+# The fuzzy matcher (backend/arbitrage/matching.py) scores title
+# similarity, but some pairs need a human verdict: equivalents the
+# scorer misses (equivalent: true) or false friends it over-scores
+# (equivalent: false). Each entry pins one unordered cross-venue pair.
+#
+# Market references are "venue:market_id", e.g. "kalshi:PRES-2028" or
+# "polymarket:0xabc...". List entries alphabetically by the joined key.
+overrides: []
