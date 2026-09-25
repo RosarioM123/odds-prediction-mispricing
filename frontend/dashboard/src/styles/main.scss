@@ -83,6 +83,41 @@ header {
     color: $text;
     font-size: 13px;
   }
+
+  &.live {
+    background: rgba($green, 0.10);
+    border-color: $green;
+
+    strong {
+      color: $green;
+    }
+  }
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  button {
+    background: transparent;
+    border: 1px solid $muted;
+    color: $text;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+
+    &.active {
+      border-color: $green;
+      color: $green;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
 }
 
 .cards {

@@ -9,8 +9,8 @@
   "trades_by_status": {
     "FILLED": 6
   },
-  "total_expected_net": 10.043208,
-  "total_realized_net": 10.260033,
+  "total_expected_net": 10.299687,
+  "total_realized_net": 10.296259,
   "hit_rate": 1.0,
   "flags": [
     "ALL_INPUT_SIMULATED: no live market data in this replay",
@@ -18,14 +18,14 @@
   ],
   "rows": [
     {
-      "opportunity_id": "bundle_arbitrage-polymarket-20260918005857429982",
+      "opportunity_id": "bundle_arbitrage-polymarket-s12345-0001",
       "strategy": "bundle_arbitrage",
       "label": "simulated",
       "detected_at": "2026-09-18T12:00:00+00:00",
-      "sized_quantity": 46.739114,
+      "sized_quantity": 46.883462,
       "decision": "PAPER_EXECUTE",
-      "expected_net": 3.442336,
-      "realized_net": 3.517118,
+      "expected_net": 3.527981,
+      "realized_net": 3.52798,
       "trade_statuses": [
         "FILLED",
         "FILLED"
@@ -33,14 +33,14 @@
       "notes": []
     },
     {
-      "opportunity_id": "cross_venue_arbitrage-polymarket-kalshi-20260918005857430450",
+      "opportunity_id": "cross_venue_arbitrage-polymarket-kalshi-s12345-0001",
       "strategy": "cross_venue_arbitrage",
       "label": "simulated",
       "detected_at": "2026-09-18T12:02:00+00:00",
-      "sized_quantity": 45.967083,
+      "sized_quantity": 46.132666,
       "decision": "PAPER_EXECUTE",
-      "expected_net": 3.158536,
-      "realized_net": 3.225797,
+      "expected_net": 3.243726,
+      "realized_net": 3.240299,
       "trade_statuses": [
         "FILLED",
         "FILLED"
@@ -48,14 +48,14 @@
       "notes": []
     },
     {
-      "opportunity_id": "bundle_arbitrage-polymarket-20260918005857430745",
+      "opportunity_id": "bundle_arbitrage-polymarket-s12345-0001",
       "strategy": "bundle_arbitrage",
       "label": "simulated",
       "detected_at": "2026-09-18T12:03:00+00:00",
-      "sized_quantity": 46.739114,
+      "sized_quantity": 46.883462,
       "decision": "PAPER_EXECUTE",
-      "expected_net": 3.442336,
-      "realized_net": 3.517118,
+      "expected_net": 3.527981,
+      "realized_net": 3.52798,
       "trade_statuses": [
         "FILLED",
         "FILLED"
@@ -67,6 +67,20 @@
     "kelly_fraction": 0.5,
     "min_net_edge": 0.005,
     "bankroll": 100.0,
-    "p_win_placeholder": true
+    "p_win_placeholder": true,
+    "p_win_status": "assumption",
+    "p_win_n": 0,
+    "p_win_period": "",
+    "drift_status": "preliminary",
+    "drift_per_second": 2.883269574310241e-07
+  },
+  "attribution": {
+    "gross_expected_edge": 13.989959,
+    "trading_fees": 3.690272,
+    "slippage": 0.0,
+    "latency_adjustment": 0.0,
+    "net_expected": 10.299687,
+    "realized_net": 10.296259,
+    "realized_minus_expected": -0.003428
   }
 }
