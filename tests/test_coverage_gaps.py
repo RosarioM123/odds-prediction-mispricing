@@ -41,11 +41,12 @@ from tests.fixtures import T0, make_book, make_market, polymarket_pair
 
 
 class _FakeResponse:
-    def __init__(self, status_code=200, payload=None, text="", bad_json=False):
+    def __init__(self, status_code=200, payload=None, text="", bad_json=False, headers=None):
         self.status_code = status_code
         self._payload = payload
         self.text = text
         self._bad_json = bad_json
+        self.headers = headers or {}
 
     def json(self):
         if self._bad_json:
@@ -77,7 +78,7 @@ class _FakeClient:
 def _patch_client(monkeypatch, script):
     fake = _FakeClient(script)
     monkeypatch.setattr(http_mod, "_client", lambda: fake)
-    monkeypatch.setattr(http_mod.time, "sleep", lambda s: None)
+    monkeypatch.setattr(http_mod, "_sleep", lambda s: None)
     return fake
 
 
@@ -94,13 +95,13 @@ def test_get_json_returns_list_payload(monkeypatch):
 def test_get_json_rate_limit_raises(monkeypatch):
     _patch_client(monkeypatch, [_FakeResponse(429, text="slow down")])
     with pytest.raises(RateLimitError, match="429"):
-        http_mod.get_json("https://x.example/m")
+        http_mod.get_json("https://x.example/m", retries=0)
 
 
 def test_get_json_http_error_raises_venue_error(monkeypatch):
     _patch_client(monkeypatch, [_FakeResponse(500, text="boom")])
     with pytest.raises(VenueError, match="HTTP 500"):
-        http_mod.get_json("https://x.example/m")
+        http_mod.get_json("https://x.example/m", retries=0)
 
 
 def test_get_json_bad_json_raises_venue_error(monkeypatch):
@@ -111,7 +112,7 @@ def test_get_json_bad_json_raises_venue_error(monkeypatch):
 
 def test_get_json_retries_transient_failure_then_succeeds(monkeypatch):
     sleeps = []
-    monkeypatch.setattr(http_mod.time, "sleep", sleeps.append)
+    monkeypatch.setattr(http_mod, "_sleep", sleeps.append)
     fake = _FakeClient([httpx.TimeoutException("boom"), _FakeResponse(200, {"ok": True})])
     monkeypatch.setattr(http_mod, "_client", lambda: fake)
     assert http_mod.get_json("https://x.example/m") == {"ok": True}
@@ -121,12 +122,13 @@ def test_get_json_retries_transient_failure_then_succeeds(monkeypatch):
 
 def test_get_json_exhausts_retries(monkeypatch):
     sleeps = []
-    monkeypatch.setattr(http_mod.time, "sleep", sleeps.append)
+    monkeypatch.setattr(http_mod, "_sleep", sleeps.append)
     script = [httpx.TimeoutException("down")] * 3
     monkeypatch.setattr(http_mod, "_client", lambda: _FakeClient(script))
     with pytest.raises(VenueError, match="failed after 3 attempts"):
         http_mod.get_json("https://x.example/m", retries=2)
-    assert sleeps == [0.5, 1.0, 1.5]
+    # No sleep after the final attempt: a scan loop must not stall.
+    assert sleeps == [0.5, 1.0]
 
 
 def test_client_honors_proxy_and_cert_env(monkeypatch):
