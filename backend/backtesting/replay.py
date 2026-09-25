@@ -14,6 +14,9 @@ Honesty rules:
   * Settlement payout ($1 per locked YES+NO pair) is credited only on
     paired fills. Unpaired residual legs are reported at cost with no
     P&L claimed.
+  * The report carries a P&L attribution: expected gross edge decomposed
+    into trading fees, slippage, and latency cost, versus realized net.
+    The gap between net expected and realized is reported, not hidden.
 """
 
 from __future__ import annotations
@@ -94,6 +97,9 @@ class ReplayReport:
     flags: list[str]
     rows: list[OpportunityRow]
     config_notes: dict[str, Any]
+    # P&L attribution over executed opportunities: expected gross edge,
+    # expected cost components, and the realized-vs-expected gap.
+    attribution: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the report to plain JSON-compatible types.
@@ -114,6 +120,7 @@ class ReplayReport:
             "flags": self.flags,
             "rows": [r.__dict__ for r in self.rows],
             "config_notes": self.config_notes,
+            "attribution": self.attribution,
         }
 
 
@@ -169,6 +176,10 @@ class ReplayEngine:
         trades_by_status: dict[str, int] = {}
         total_expected = 0.0
         total_realized = 0.0
+        gross_expected = 0.0
+        fees_expected = 0.0
+        slippage_expected = 0.0
+        latency_expected = 0.0
         n_executed = 0
         n_rejected = 0
         wins = 0
@@ -218,10 +229,14 @@ class ReplayEngine:
                     fraction=self.config.kelly.fraction,
                     max_position=self.config.risk.max_position_per_market,
                     # Locked arbitrage: p_win ~ 1 by construction; the
-                    # remaining uncertainty is execution risk. This is an
-                    # assumption (see configs/strategy.yaml), not a model.
+                    # remaining uncertainty is execution risk. Without a
+                    # calibration this is an assumption; with one it is
+                    # fitted from paper-execution outcomes on live
+                    # snapshots (see configs/calibration.yaml).
                     p_win=self.config.kelly.arbitrage_p_win,
-                    p_win_is_placeholder=False,
+                    p_win_status=self.config.kelly.p_win_status,
+                    p_win_n=self.config.kelly.p_win_n,
+                    p_win_period=self.config.kelly.p_win_period,
                 )
                 qty = sizing.quantity
                 book_ages: list[float] = []
@@ -254,6 +269,10 @@ class ReplayEngine:
                 n_executed += 1
                 expected = opp.costs.net_edge * qty
                 total_expected += expected
+                gross_expected += opp.costs.raw_edge * qty
+                fees_expected += opp.costs.trading_fees * qty
+                slippage_expected += opp.costs.slippage * qty
+                latency_expected += opp.costs.latency_adjustment * qty
                 trades = self.broker.execute(
                     opp, qty, timelines, markets, decide_at=snap.captured_at
                 )
@@ -293,6 +312,17 @@ class ReplayEngine:
                 f"SAMPLE_TOO_SMALL: n_executed={n_executed} < {MIN_SAMPLE_FOR_STATS}; "
                 f"Sharpe ratio, win rate, and significance claims are not meaningful"
             )
+        attribution = {
+            "gross_expected_edge": round(gross_expected, 6),
+            "trading_fees": round(fees_expected, 6),
+            "slippage": round(slippage_expected, 6),
+            "latency_adjustment": round(latency_expected, 6),
+            "net_expected": round(total_expected, 6),
+            "realized_net": round(total_realized, 6),
+            # Realized includes $1 settlement payouts on paired fills and
+            # partial-fill effects; the gap is reported, not hidden.
+            "realized_minus_expected": round(total_realized - total_expected, 6),
+        }
         return ReplayReport(
             n_snapshots=len(snaps),
             labels=labels,
@@ -310,7 +340,13 @@ class ReplayEngine:
                 "min_net_edge": self.config.detection.min_net_edge,
                 "bankroll": self.bankroll,
                 "p_win_placeholder": self.config.kelly.probability_is_placeholder,
+                "p_win_status": self.config.kelly.p_win_status,
+                "p_win_n": self.config.kelly.p_win_n,
+                "p_win_period": self.config.kelly.p_win_period,
+                "drift_status": self.config.latency.drift_status,
+                "drift_per_second": self.config.latency.adverse_drift_per_second,
             },
+            attribution=attribution,
         )
 
     @staticmethod
