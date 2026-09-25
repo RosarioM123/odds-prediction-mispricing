@@ -24,3 +24,14 @@ data/processed/*
 .DS_Store
 .idea/
 .vscode/
+
+# Live runtime data (regenerable; observations may be large)
+data/live/
+
+# Generated dashboard export from the local scan ledger
+frontend/dashboard/public/live-report.json
+
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov/
